@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.Rendering.PostProcessing;
 #endif
 
-namespace Oborokurage.BOSSLookPreset.Editor.Ops
+namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 {
     public static class PostProcessOps
     {

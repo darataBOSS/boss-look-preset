@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Oborokurage.BOSSLookPreset.Editor
+namespace DarataBOSS.BOSSLookPreset.Editor
 {
     public static class BOSSLookDefaults
     {

@@ -1,6 +1,6 @@
 {
-    "name": "com.oborokurage.boss-look-preset.Editor",
-    "rootNamespace": "Oborokurage.BOSSLookPreset.Editor",
+    "name": "com.darataboss.boss-look-preset.Editor",
+    "rootNamespace": "DarataBOSS.BOSSLookPreset.Editor",
     "references": [
         "Unity.Postprocessing.Runtime",
         "Unity.Postprocessing.Editor"

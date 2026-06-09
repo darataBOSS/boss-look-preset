@@ -1,10 +1,10 @@
 using System.Collections.Generic;
-using Oborokurage.BOSSLookPreset.Editor.Ops;
+using DarataBOSS.BOSSLookPreset.Editor.Ops;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Oborokurage.BOSSLookPreset.Editor
+namespace DarataBOSS.BOSSLookPreset.Editor
 {
     public class BOSSLookWizard : EditorWindow
     {

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
-namespace Oborokurage.BOSSLookPreset.Editor.Ops
+namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 {
     public static class LightRigOps
     {

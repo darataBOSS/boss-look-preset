@@ -4,7 +4,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Oborokurage.BOSSLookPreset.Editor.Ops
+namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 {
     public static class EnvironmentOps
     {

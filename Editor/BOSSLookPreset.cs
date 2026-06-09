@@ -6,7 +6,7 @@ using UnityEngine.Rendering;
 using UnityEngine.Rendering.PostProcessing;
 #endif
 
-namespace Oborokurage.BOSSLookPreset.Editor
+namespace DarataBOSS.BOSSLookPreset.Editor
 {
     public enum BOSSLookPhase
     {

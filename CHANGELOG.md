@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1] - 2026-06-09
+
+### Changed
+- Renamed package id from `com.oborokurage.boss-look-preset` to `com.darataboss.boss-look-preset`.
+- Renamed C# root namespace from `Oborokurage.BOSSLookPreset` to `DarataBOSS.BOSSLookPreset`.
+
+### Fixed
+- Added `.meta` files for all package assets so Unity no longer warns "has no meta file, but it's in an immutable folder" when the package is installed via Package Manager.
+
 ## [0.1.0] - 2026-06-09
 
 ### Added
