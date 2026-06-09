@@ -1,0 +1,25 @@
+{
+    "name": "com.oborokurage.boss-look-preset.Editor",
+    "rootNamespace": "Oborokurage.BOSSLookPreset.Editor",
+    "references": [
+        "Unity.Postprocessing.Runtime",
+        "Unity.Postprocessing.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.postprocessing",
+            "expression": "3.0.0",
+            "define": "BOSS_LOOK_PRESET_HAS_PPV2"
+        }
+    ],
+    "noEngineReferences": false
+}

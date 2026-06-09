@@ -1,0 +1,22 @@
+{
+  "name": "com.oborokurage.boss-look-preset",
+  "version": "0.1.0",
+  "displayName": "BOSS Look Preset",
+  "description": "HDRI bake / 3-point light rig / post-processing setup wizard for STYLY (Built-in RP).",
+  "unity": "2022.3",
+  "unityRelease": "24f1",
+  "dependencies": {
+    "com.unity.postprocessing": "3.4.0"
+  },
+  "keywords": [
+    "lighting",
+    "bake",
+    "hdri",
+    "post-processing",
+    "styly",
+    "webar"
+  ],
+  "author": {
+    "name": "darata.BOSS"
+  }
+}

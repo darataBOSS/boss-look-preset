@@ -1,0 +1,14 @@
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+.vs/
+*.csproj
+*.sln
+Library/
+Temp/
+Logs/
+Obj/
+Build/
