@@ -2,7 +2,7 @@
 
 Unity Editor 拡張パッケージ。HDRI 環境光ベイク・3点ライトリグ・ポストプロセスをウィザードで半自動セットアップし、STYLY の WebAR / アプリ向けに「ルック」を整えるツール。
 
-- レンダーパイプライン: **Built-in RP** 専用
+- レンダーパイプライン: **Built-in RP** および **URP** (自動判定)
 - 最低対応 Unity: **2022.3.24f1**
 - メニュー: `BOSS > Look Preset`
 
@@ -40,11 +40,27 @@ https://github.com/darataBOSS/boss-look-preset.git#v0.1.0
 
 モジュール C (ポストプロセス) はランタイムのカメラ効果で、この状態機械の **外** です。いつでも付け外し・調整でき、AR 化後でも触れます。
 
+## Built-in / URP の自動判定
+
+Module C (ポストプロセス) は `GraphicsSettings.defaultRenderPipeline` を見て、Built-in RP なら PPv2 (`PostProcessVolume` + `PostProcessLayer`)、URP なら Volume フレームワーク (`Volume` + `VolumeProfile`) に自動で切り替わります。プロジェクト側でレンダーパイプラインを切り替えたら、ウィザードを開き直すだけで対応する系統が立ち上がります。
+
+| エフェクト | Built-in (PPv2) | URP (Volume) |
+|---|---|---|
+| Bloom | ○ | ○ |
+| Color Grading / Tonemapping | ○ (ColorGrading + ACES) | ○ (Tonemapping + ColorAdjustments + WhiteBalance) |
+| Vignette | ○ | ○ |
+| Depth of Field | ○ | ○ |
+| Motion Blur | ○ | ○ |
+| Ambient Occlusion | ○ (VolumeComponent) | △ Renderer Feature の手動追加が必要 |
+
+Module A (HDRI / ベイク) と Module B (ライトリグ) は両 RP 共通で動きます。
+
 ## 注意点
 
-- ポストプロセスを正しく効かせるには Player Settings の **Color Space = Linear** が前提です。Gamma の場合は警告を出しますが強制変更はしません。
+- ポストプロセスを正しく効かせるには Player Settings の **Color Space = Linear** が前提です。Gamma だと Tonemapping / Color Grading が実質使えなくなります (Bloom / Vignette は動作可)。Gamma の場合は警告のみ表示し、強制変更はしません。
+- URP の場合、Camera 側で `Post Processing` トグルを ON にし、URP Asset 側で `Post Processing` を有効にしておいてください (このツールは Camera Inspector や URP Asset には触りません)。
 - WebAR でのポストプロセスの効きについては STYLY 公式の明言が確認できていないため、納品時は実機で要確認です。
-- PPv2 は Built-in RP 専用です。URP は別系統 (Volume フレームワーク) になります。
+- HDRP には現状未対応です。
 
 ## ライセンス
 

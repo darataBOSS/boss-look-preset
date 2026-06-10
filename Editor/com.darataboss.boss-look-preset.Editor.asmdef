@@ -3,7 +3,11 @@
     "rootNamespace": "DarataBOSS.BOSSLookPreset.Editor",
     "references": [
         "Unity.Postprocessing.Runtime",
-        "Unity.Postprocessing.Editor"
+        "Unity.Postprocessing.Editor",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Core.Editor",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Universal.Editor"
     ],
     "includePlatforms": [
         "Editor"
@@ -19,6 +23,16 @@
             "name": "com.unity.postprocessing",
             "expression": "3.0.0",
             "define": "BOSS_LOOK_PRESET_HAS_PPV2"
+        },
+        {
+            "name": "com.unity.render-pipelines.universal",
+            "expression": "10.0.0",
+            "define": "BOSS_LOOK_PRESET_HAS_URP"
+        },
+        {
+            "name": "com.unity.render-pipelines.core",
+            "expression": "10.0.0",
+            "define": "BOSS_LOOK_PRESET_HAS_SRPCORE"
         }
     ],
     "noEngineReferences": false

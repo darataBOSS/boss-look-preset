@@ -1,8 +1,8 @@
 {
   "name": "com.darataboss.boss-look-preset",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "displayName": "BOSS Look Preset",
-  "description": "HDRI bake / 3-point light rig / post-processing setup wizard for STYLY (Built-in RP).",
+  "description": "HDRI bake / 3-point light rig / post-processing setup wizard for STYLY (Built-in RP and URP).",
   "unity": "2022.3",
   "unityRelease": "24f1",
   "dependencies": {

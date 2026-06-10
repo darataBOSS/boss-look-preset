@@ -123,6 +123,12 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                 EditorGUILayout.HelpBox("プリセット未選択。Module A の Step 0 で新規作成、または既存プリセットを上のスロットにドラッグしてください。",
                     MessageType.Info);
             }
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField("Render Pipeline", GUILayout.Width(110));
+                EditorGUILayout.LabelField(RenderPipelineDetector.DisplayName, EditorStyles.miniBoldLabel);
+            }
         }
 
         private void DrawModuleTabs()
@@ -581,16 +587,23 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         {
             if (!RequirePreset()) return;
 
-            EditorGUILayout.LabelField("ポストプロセス (PPv2)", EditorStyles.boldLabel);
+            var rp = RenderPipelineDetector.Active;
+            EditorGUILayout.LabelField($"ポストプロセス ({PostProcessOps.BackendName})", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "Built-in RP 用 Post Processing Stack v2。Profile + Volume + Layer 一式をセットアップします。\n" +
-                "状態機械の外なので AR化後でも操作できます。",
+                rp == RenderPipelineDetector.ActiveRP.URP
+                    ? "URP の Volume フレームワークでセットアップします。Profile + 全体 Volume を作成。\n" +
+                      "Camera の Post Processing トグル / Renderer Asset 側 (SSAO 等) は手動で ON にしてください。"
+                    : "Built-in RP 用 Post Processing Stack v2。Profile + Volume + Layer 一式をセットアップします。\n" +
+                      "状態機械の外なので AR化後でも操作できます。",
                 MessageType.Info);
 
-            if (!PostProcessOps.IsPPv2Available)
+            if (!PostProcessOps.BackendAvailable)
             {
+                string missing = rp == RenderPipelineDetector.ActiveRP.URP
+                    ? "URP (com.unity.render-pipelines.universal)"
+                    : "Post Processing Stack v2 (com.unity.postprocessing)";
                 EditorGUILayout.HelpBox(
-                    "Post Processing Stack v2 が見つかりません。Package Manager から com.unity.postprocessing を追加してください。",
+                    $"{missing} が見つからないため、現在のレンダーパイプライン ({RenderPipelineDetector.DisplayName}) ではポストプロセスをセットアップできません。",
                     MessageType.Error);
                 return;
             }
@@ -598,16 +611,23 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             if (!PostProcessOps.IsLinearColorSpace)
             {
                 EditorGUILayout.HelpBox(
-                    "Color Space が Linear ではありません。Player Settings → Other Settings で Linear に変更することを推奨します。",
+                    "Color Space が Linear ではありません。Tonemapping / Color Grading は実質使えなくなります。Player Settings → Other Settings で Linear に変更することを推奨します。",
                     MessageType.Warning);
             }
 
             preset.postBloomEnabled = EditorGUILayout.Toggle("Bloom", preset.postBloomEnabled);
-            preset.postColorGradingEnabled = EditorGUILayout.Toggle("Color Grading", preset.postColorGradingEnabled);
+            preset.postColorGradingEnabled = EditorGUILayout.Toggle("Color Grading (Tonemapping)", preset.postColorGradingEnabled);
             preset.postVignetteEnabled = EditorGUILayout.Toggle("Vignette", preset.postVignetteEnabled);
             preset.postDepthOfFieldEnabled = EditorGUILayout.Toggle("Depth of Field", preset.postDepthOfFieldEnabled);
             preset.postMotionBlurEnabled = EditorGUILayout.Toggle("Motion Blur", preset.postMotionBlurEnabled);
             preset.postAOEnabled = EditorGUILayout.Toggle("Ambient Occlusion", preset.postAOEnabled);
+
+            if (rp == RenderPipelineDetector.ActiveRP.URP && preset.postAOEnabled)
+            {
+                EditorGUILayout.HelpBox(
+                    "URP の AO は Renderer Feature です。URP Renderer Asset → Add Renderer Feature → Screen Space Ambient Occlusion を手動で追加してください。",
+                    MessageType.Warning);
+            }
 
             EditorGUILayout.Space(4);
             if (GUILayout.Button("ポストプロセスをセットアップ / 更新"))
@@ -617,7 +637,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             if (GUILayout.Button("ポストプロセスを外す (Volume / Layer 除去)"))
             {
                 if (EditorUtility.DisplayDialog("BOSS Look Preset",
-                        "Post Process Volume と Layer をシーンから除去します。Profile アセットは残します。",
+                        "シーンの Volume / Post Process Volume / Post Process Layer を除去します。Profile アセットは残します。",
                         "外す", "キャンセル"))
                 {
                     PostProcessOps.Remove(preset);
@@ -627,14 +647,24 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             EditorGUILayout.Space(4);
             EditorGUILayout.LabelField("Generated", EditorStyles.boldLabel);
 #if BOSS_LOOK_PRESET_HAS_PPV2
-            preset.postProfile = (UnityEngine.Rendering.PostProcessing.PostProcessProfile)EditorGUILayout.ObjectField(
-                "Post Profile", preset.postProfile, typeof(UnityEngine.Rendering.PostProcessing.PostProcessProfile), false);
-            preset.postVolume = (UnityEngine.Rendering.PostProcessing.PostProcessVolume)EditorGUILayout.ObjectField(
-                "Post Volume", preset.postVolume, typeof(UnityEngine.Rendering.PostProcessing.PostProcessVolume), true);
-            preset.postLayer = (UnityEngine.Rendering.PostProcessing.PostProcessLayer)EditorGUILayout.ObjectField(
-                "Post Layer", preset.postLayer, typeof(UnityEngine.Rendering.PostProcessing.PostProcessLayer), true);
-#else
-            EditorGUILayout.HelpBox("PPv2 が無いため参照を表示できません。", MessageType.None);
+            if (rp == RenderPipelineDetector.ActiveRP.BuiltIn)
+            {
+                preset.postProfile = (UnityEngine.Rendering.PostProcessing.PostProcessProfile)EditorGUILayout.ObjectField(
+                    "Post Profile", preset.postProfile, typeof(UnityEngine.Rendering.PostProcessing.PostProcessProfile), false);
+                preset.postVolume = (UnityEngine.Rendering.PostProcessing.PostProcessVolume)EditorGUILayout.ObjectField(
+                    "Post Volume", preset.postVolume, typeof(UnityEngine.Rendering.PostProcessing.PostProcessVolume), true);
+                preset.postLayer = (UnityEngine.Rendering.PostProcessing.PostProcessLayer)EditorGUILayout.ObjectField(
+                    "Post Layer", preset.postLayer, typeof(UnityEngine.Rendering.PostProcessing.PostProcessLayer), true);
+            }
+#endif
+#if BOSS_LOOK_PRESET_HAS_SRPCORE
+            if (rp == RenderPipelineDetector.ActiveRP.URP)
+            {
+                preset.urpVolumeProfile = (UnityEngine.Rendering.VolumeProfile)EditorGUILayout.ObjectField(
+                    "URP Volume Profile", preset.urpVolumeProfile, typeof(UnityEngine.Rendering.VolumeProfile), false);
+                preset.urpVolume = (UnityEngine.Rendering.Volume)EditorGUILayout.ObjectField(
+                    "URP Volume", preset.urpVolume, typeof(UnityEngine.Rendering.Volume), true);
+            }
 #endif
         }
 

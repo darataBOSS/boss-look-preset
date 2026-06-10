@@ -1,182 +1,76 @@
 using UnityEditor;
 using UnityEngine;
-#if BOSS_LOOK_PRESET_HAS_PPV2
-using UnityEngine.Rendering.PostProcessing;
-#endif
 
 namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 {
+    /// <summary>
+    /// Dispatcher for Module C. Picks PPv2 (Built-in RP) or the URP Volume
+    /// framework based on the currently active render pipeline asset.
+    /// </summary>
     public static class PostProcessOps
     {
-        public const string DefaultPostLayerName = "PostProcessing";
+        public static bool IsLinearColorSpace => PlayerSettings.colorSpace == ColorSpace.Linear;
 
-        public static bool IsPPv2Available
+        /// <summary>True for backwards compatibility; the wizard now asks the
+        /// active backend (PPv2 for Built-in, URP Volume for URP) directly via
+        /// <see cref="BackendAvailable"/>.</summary>
+        public static bool IsPPv2Available => PostProcessOpsBuiltin.IsAvailable;
+
+        /// <summary>Whether the backend matching the currently active RP is usable.</summary>
+        public static bool BackendAvailable
         {
             get
             {
-#if BOSS_LOOK_PRESET_HAS_PPV2
-                return true;
-#else
-                return false;
-#endif
+                switch (RenderPipelineDetector.Active)
+                {
+                    case RenderPipelineDetector.ActiveRP.BuiltIn: return PostProcessOpsBuiltin.IsAvailable;
+                    case RenderPipelineDetector.ActiveRP.URP: return PostProcessOpsURP.IsAvailable;
+                    default: return false;
+                }
             }
         }
 
-        public static bool IsLinearColorSpace => PlayerSettings.colorSpace == ColorSpace.Linear;
+        public static string BackendName
+        {
+            get
+            {
+                switch (RenderPipelineDetector.Active)
+                {
+                    case RenderPipelineDetector.ActiveRP.BuiltIn: return "Post Processing Stack v2";
+                    case RenderPipelineDetector.ActiveRP.URP: return "URP Volume framework";
+                    case RenderPipelineDetector.ActiveRP.HDRP: return "HDRP (not supported in this version)";
+                    default: return "Unknown / Custom SRP (not supported)";
+                }
+            }
+        }
 
         public static void Setup(BOSSLookPreset preset)
         {
             if (preset == null) return;
-#if !BOSS_LOOK_PRESET_HAS_PPV2
-            EditorUtility.DisplayDialog("BOSS Look Preset",
-                "Post Processing Stack v2 が見つかりません。Package Manager で com.unity.postprocessing を追加してください。",
-                "OK");
-            return;
-#else
-            string profilePath = $"{preset.folderPath}/{preset.baseName}_PostProfile.asset";
-            var profile = AssetDatabase.LoadAssetAtPath<PostProcessProfile>(profilePath);
-            if (profile == null)
+            switch (RenderPipelineDetector.Active)
             {
-                profile = ScriptableObject.CreateInstance<PostProcessProfile>();
-                AssetDatabase.CreateAsset(profile, profilePath);
+                case RenderPipelineDetector.ActiveRP.BuiltIn:
+                    PostProcessOpsBuiltin.Setup(preset);
+                    break;
+                case RenderPipelineDetector.ActiveRP.URP:
+                    PostProcessOpsURP.Setup(preset);
+                    break;
+                default:
+                    EditorUtility.DisplayDialog("BOSS Look Preset",
+                        $"このレンダーパイプライン ({RenderPipelineDetector.DisplayName}) は本バージョンではサポートしていません。",
+                        "OK");
+                    break;
             }
-
-            ApplyEffectToggles(profile, preset);
-            EditorUtility.SetDirty(profile);
-            AssetDatabase.SaveAssets();
-            preset.postProfile = profile;
-
-            var volume = preset.postVolume;
-            if (volume == null)
-            {
-                var volumeGO = new GameObject($"{preset.baseName} Post Process Volume");
-                Undo.RegisterCreatedObjectUndo(volumeGO, "Create Post Process Volume");
-                volume = volumeGO.AddComponent<PostProcessVolume>();
-                preset.postVolume = volume;
-            }
-            volume.isGlobal = true;
-            volume.weight = 1f;
-            volume.priority = 0f;
-            volume.sharedProfile = profile;
-            EditorUtility.SetDirty(volume);
-
-            var cam = Camera.main;
-            if (cam == null)
-            {
-                Debug.LogWarning("[BOSS Look] MainCamera が見つかりませんでした。Post Process Layer の追加はスキップしました。");
-            }
-            else
-            {
-                var layer = cam.GetComponent<PostProcessLayer>();
-                if (layer == null)
-                {
-                    layer = Undo.AddComponent<PostProcessLayer>(cam.gameObject);
-                }
-                int idx = LayerMask.NameToLayer(DefaultPostLayerName);
-                if (idx < 0)
-                {
-                    Debug.LogWarning($"[BOSS Look] Layer \"{DefaultPostLayerName}\" が無いため Default を使います。Tags and Layers でレイヤーを追加してください。");
-                    layer.volumeLayer = 1; // Default
-                }
-                else
-                {
-                    layer.volumeLayer = 1 << idx;
-                    volume.gameObject.layer = idx;
-                }
-
-                var resources = LoadDefaultPostResources();
-                if (resources != null)
-                {
-                    layer.Init(resources);
-                }
-                else
-                {
-                    Debug.LogWarning("[BOSS Look] PostProcessResources が見つかりませんでした。手動で Layer を初期化してください。");
-                }
-
-                EditorUtility.SetDirty(layer);
-                preset.postLayer = layer;
-            }
-
-            EditorUtility.SetDirty(preset);
-
-            if (!IsLinearColorSpace)
-            {
-                Debug.LogWarning("[BOSS Look] Color Space が Linear ではありません。Player Settings で Linear に変更することを推奨します。");
-            }
-#endif
         }
 
-#if BOSS_LOOK_PRESET_HAS_PPV2
-        private static PostProcessResources LoadDefaultPostResources()
-        {
-            string[] guids = AssetDatabase.FindAssets("t:PostProcessResources");
-            foreach (var guid in guids)
-            {
-                var path = AssetDatabase.GUIDToAssetPath(guid);
-                var res = AssetDatabase.LoadAssetAtPath<PostProcessResources>(path);
-                if (res != null) return res;
-            }
-            return null;
-        }
-
-        private static void ApplyEffectToggles(PostProcessProfile profile, BOSSLookPreset preset)
-        {
-            EnsureEffect<Bloom>(profile, preset.postBloomEnabled, e =>
-            {
-                e.intensity.overrideState = true;
-                e.intensity.value = BOSSLookDefaults.PostBloomIntensity;
-                e.threshold.overrideState = true;
-                e.threshold.value = 1.1f;
-            });
-
-            EnsureEffect<ColorGrading>(profile, preset.postColorGradingEnabled, e =>
-            {
-                e.tonemapper.overrideState = true;
-                e.tonemapper.value = Tonemapper.ACES;
-                e.temperature.overrideState = true;
-                e.temperature.value = 0f;
-            });
-
-            EnsureEffect<Vignette>(profile, preset.postVignetteEnabled, e =>
-            {
-                e.intensity.overrideState = true;
-                e.intensity.value = BOSSLookDefaults.PostVignetteIntensity;
-                e.smoothness.overrideState = true;
-                e.smoothness.value = 0.5f;
-            });
-
-            EnsureEffect<DepthOfField>(profile, preset.postDepthOfFieldEnabled, null);
-            EnsureEffect<MotionBlur>(profile, preset.postMotionBlurEnabled, null);
-            EnsureEffect<AmbientOcclusion>(profile, preset.postAOEnabled, null);
-        }
-
-        private static void EnsureEffect<T>(PostProcessProfile profile, bool enabled, System.Action<T> configure)
-            where T : PostProcessEffectSettings
-        {
-            T effect = profile.HasSettings<T>() ? profile.GetSetting<T>() : profile.AddSettings<T>();
-            effect.enabled.overrideState = true;
-            effect.enabled.value = enabled;
-            configure?.Invoke(effect);
-        }
-#endif
-
+        /// <summary>Removes from whichever backend has artefacts. Safe to call
+        /// even after switching render pipelines mid-project — both branches
+        /// are cleaned.</summary>
         public static void Remove(BOSSLookPreset preset)
         {
             if (preset == null) return;
-#if BOSS_LOOK_PRESET_HAS_PPV2
-            if (preset.postVolume != null)
-            {
-                Undo.DestroyObjectImmediate(preset.postVolume.gameObject);
-            }
-            if (preset.postLayer != null)
-            {
-                Undo.DestroyObjectImmediate(preset.postLayer);
-            }
-#endif
-            preset.postVolume = null;
-            preset.postLayer = null;
-            EditorUtility.SetDirty(preset);
+            PostProcessOpsBuiltin.Remove(preset);
+            PostProcessOpsURP.Remove(preset);
         }
     }
 }

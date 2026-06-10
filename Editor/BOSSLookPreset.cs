@@ -5,6 +5,9 @@ using UnityEngine.Rendering;
 #if BOSS_LOOK_PRESET_HAS_PPV2
 using UnityEngine.Rendering.PostProcessing;
 #endif
+#if BOSS_LOOK_PRESET_HAS_URP
+using UnityEngine.Rendering.Universal;
+#endif
 
 namespace DarataBOSS.BOSSLookPreset.Editor
 {
@@ -100,7 +103,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         public Vector2 areaSize = new Vector2(2f, 2f);
         public List<StashedLightInfo> stashedDirectionalLights = new List<StashedLightInfo>();
 
-        // ---- Post Processing (PPv2) ----
+        // ---- Post Processing (Built-in / PPv2) ----
 #if BOSS_LOOK_PRESET_HAS_PPV2
         public PostProcessProfile postProfile;
         public PostProcessVolume postVolume;
@@ -110,6 +113,17 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         public Component postVolume;
         public Component postLayer;
 #endif
+
+        // ---- Post Processing (URP / Volume framework) ----
+#if BOSS_LOOK_PRESET_HAS_SRPCORE
+        public Volume urpVolume;
+        public VolumeProfile urpVolumeProfile;
+#else
+        public Component urpVolume;
+        public ScriptableObject urpVolumeProfile;
+#endif
+
+        // Shared effect toggles (semantic, not API-specific)
         public bool postBloomEnabled = true;
         public bool postColorGradingEnabled = true;
         public bool postVignetteEnabled = true;

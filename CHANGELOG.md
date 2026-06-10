@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-06-09
+
+### Added
+- URP (Universal Render Pipeline) support for Module C (Post Processing).
+  Module C now auto-detects the active render pipeline and dispatches to either
+  PPv2 (Built-in RP) or the URP Volume framework. No user toggle required.
+- `RenderPipelineDetector` helper that reports Built-in / URP / HDRP / Unknown.
+- URP Volume + VolumeProfile generation in Module C, with Bloom, Tonemapping (ACES),
+  ColorAdjustments, WhiteBalance, Vignette, DepthOfField, MotionBlur as
+  VolumeComponents matching the existing shared effect toggles.
+- Active render pipeline name displayed in the wizard header.
+
+### Changed
+- `PostProcessOps` is now a dispatcher; PPv2 implementation moved to
+  `PostProcessOpsBuiltin`, URP implementation lives in `PostProcessOpsURP`.
+- `BOSSLookPreset` SO gained `urpVolume` / `urpVolumeProfile` fields.
+- Module C tab labels itself with the active backend ("PPv2" or "URP Volume").
+
+### Notes
+- URP AO is a Renderer Feature (Screen Space Ambient Occlusion), not a
+  VolumeComponent. The wizard now shows a warning and the user must add the
+  feature to their URP Renderer Asset manually.
+- Module A (HDRI / bake) and Module B (light rig) work on both Built-in and URP
+  unchanged — the Unity APIs they use are pipeline-agnostic.
+- HDRP is detected but not supported in this version.
+
 ## [0.1.1] - 2026-06-09
 
 ### Changed
