@@ -42,6 +42,9 @@ namespace DarataBOSS.BOSSLookPreset.Editor
     {
         public Light light;
         public bool wasEnabled;
+        // Asset-to-scene references die on editor restart, so the hierarchy
+        // path is the durable key used to re-find the light afterwards.
+        public string scenePath;
     }
 
     public class BOSSLookPreset : ScriptableObject

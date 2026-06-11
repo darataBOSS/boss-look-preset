@@ -1,11 +1,24 @@
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 {
     public static class LightRigOps
     {
+        /// <summary>Built-in RP ignores Light.colorTemperature unless these
+        /// project-wide flags are on, so the rig's Kelvin values would
+        /// silently do nothing.</summary>
+        public static bool ColorTemperatureSupported =>
+            GraphicsSettings.lightsUseColorTemperature && GraphicsSettings.lightsUseLinearIntensity;
+
+        public static void EnableColorTemperature()
+        {
+            GraphicsSettings.lightsUseLinearIntensity = true;
+            GraphicsSettings.lightsUseColorTemperature = true;
+        }
+
         public static void StashExistingDirectionalLights(BOSSLookPreset preset)
         {
             if (preset == null) return;
@@ -14,7 +27,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
                 preset.stashedDirectionalLights = new List<StashedLightInfo>();
             }
 
-            foreach (var l in Object.FindObjectsOfType<Light>())
+            foreach (var l in SceneRelinkOps.FindAllInScene<Light>())
             {
                 if (l == null) continue;
                 if (l.type != LightType.Directional) continue;
@@ -27,8 +40,13 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
                 }
                 if (alreadyStashed) continue;
 
-                Undo.RecordObject(l.gameObject, "Stash Directional Light");
-                var stash = new StashedLightInfo { light = l, wasEnabled = l.enabled };
+                Undo.RecordObject(l, "Stash Directional Light");
+                var stash = new StashedLightInfo
+                {
+                    light = l,
+                    wasEnabled = l.enabled,
+                    scenePath = SceneRelinkOps.GetHierarchyPath(l.transform),
+                };
                 preset.stashedDirectionalLights.Add(stash);
                 l.enabled = false;
             }
@@ -38,13 +56,26 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
         public static void RestoreStashedLights(BOSSLookPreset preset)
         {
             if (preset == null || preset.stashedDirectionalLights == null) return;
+            SceneRelinkOps.RelinkAll(preset);
+
+            var unresolved = new List<string>();
             foreach (var info in preset.stashedDirectionalLights)
             {
-                if (info != null && info.light != null)
+                if (info == null) continue;
+                if (info.light != null)
                 {
                     Undo.RecordObject(info.light, "Restore Stashed Light");
                     info.light.enabled = info.wasEnabled;
                 }
+                else if (!string.IsNullOrEmpty(info.scenePath))
+                {
+                    unresolved.Add(info.scenePath);
+                }
+            }
+            if (unresolved.Count > 0)
+            {
+                Debug.LogWarning("[BOSS Look] 次の退避ライトが見つからず復元できませんでした (リネーム/削除/別シーン?):\n" +
+                                 string.Join("\n", unresolved));
             }
             preset.stashedDirectionalLights.Clear();
             EditorUtility.SetDirty(preset);
@@ -67,6 +98,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
         public static void CreateOrUpdateRig(BOSSLookPreset preset)
         {
             if (preset == null) return;
+            SceneRelinkOps.RelinkAll(preset);
 
             var rigRoot = preset.rigRoot;
             if (rigRoot == null)
@@ -140,7 +172,10 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             light.transform.LookAt(subjectPos);
 
             light.type = preset.rigLightKind == RigLightKind.Spot ? LightType.Spot : LightType.Area;
-            light.lightmapBakeType = LightmapBakeType.Mixed;
+            // Area lights only support Baked; Mixed on an Area light is invalid.
+            light.lightmapBakeType = light.type == LightType.Spot
+                ? LightmapBakeType.Mixed
+                : LightmapBakeType.Baked;
             light.shadows = shadows;
             light.intensity = intensity;
             light.useColorTemperature = true;

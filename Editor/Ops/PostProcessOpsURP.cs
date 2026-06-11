@@ -66,6 +66,25 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             volume.sharedProfile = profile;
             EditorUtility.SetDirty(volume);
 
+            // The volume does nothing until the camera opts in, so flip the
+            // URP per-camera toggle automatically.
+            var mainCam = Camera.main;
+            if (mainCam != null)
+            {
+                var camData = mainCam.GetUniversalAdditionalCameraData();
+                if (camData != null && !camData.renderPostProcessing)
+                {
+                    Undo.RecordObject(camData, "Enable URP Post Processing");
+                    camData.renderPostProcessing = true;
+                    EditorUtility.SetDirty(camData);
+                    Debug.Log("[BOSS Look] Main Camera の Post Processing を ON にしました。");
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[BOSS Look] MainCamera が見つかりませんでした。Camera の Post Processing を手動で ON にしてください。");
+            }
+
             EditorUtility.SetDirty(preset);
 
             if (!PostProcessOps.IsLinearColorSpace)

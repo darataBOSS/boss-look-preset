@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using DarataBOSS.BOSSLookPreset.Editor.Ops;
 using UnityEditor;
+using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -21,7 +22,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             S7_Finalize = 7,
         }
 
-        private BOSSLookPreset preset;
+        [SerializeField] private BOSSLookPreset preset;
         private Module currentModule = Module.A_Environment;
         private EnvStep currentStep = EnvStep.S0_NameFolder;
         private string newBaseName = BOSSLookDefaults.DefaultBaseName;
@@ -29,6 +30,10 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         private Vector2 scroll;
         private List<GameObject> lastMissingUv2 = new List<GameObject>();
         private bool bakeWasRunning;
+        private readonly BoxBoundsHandle probeAreaHandle = new BoxBoundsHandle();
+
+        private static string LastPresetPrefKey =>
+            "BOSSLook.LastPresetGUID." + Application.dataPath.GetHashCode();
 
         [MenuItem("BOSS/Look Preset")]
         public static void Open()
@@ -41,16 +46,140 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         private void OnEnable()
         {
             Lightmapping.bakeCompleted += OnBakeCompleted;
+            SceneView.duringSceneGui += OnSceneGUI;
+
+            if (preset == null)
+            {
+                TryAutoLoadPreset();
+            }
+            if (preset != null)
+            {
+                SceneRelinkOps.RelinkAll(preset);
+                AdoptPreset(preset, jumpToStep: false);
+            }
         }
 
         private void OnDisable()
         {
             Lightmapping.bakeCompleted -= OnBakeCompleted;
+            SceneView.duringSceneGui -= OnSceneGUI;
         }
 
         private void OnBakeCompleted()
         {
             Repaint();
+        }
+
+        private void TryAutoLoadPreset()
+        {
+            // Last used preset first, then "the only one in the project".
+            string guid = EditorPrefs.GetString(LastPresetPrefKey, null);
+            if (!string.IsNullOrEmpty(guid))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (!string.IsNullOrEmpty(path))
+                {
+                    preset = AssetDatabase.LoadAssetAtPath<BOSSLookPreset>(path);
+                }
+            }
+            if (preset == null)
+            {
+                var guids = AssetDatabase.FindAssets("t:BOSSLookPreset");
+                if (guids.Length == 1)
+                {
+                    preset = AssetDatabase.LoadAssetAtPath<BOSSLookPreset>(
+                        AssetDatabase.GUIDToAssetPath(guids[0]));
+                }
+            }
+        }
+
+        /// <summary>Common handling when a preset becomes current: relink scene
+        /// refs, remember it, sync the name fields, optionally resume at the
+        /// first incomplete step.</summary>
+        private void AdoptPreset(BOSSLookPreset p, bool jumpToStep)
+        {
+            preset = p;
+            if (preset == null) return;
+
+            SceneRelinkOps.RelinkAll(preset);
+            newBaseName = preset.baseName;
+            newFolderPath = SafeParent(preset.folderPath);
+
+            string path = AssetDatabase.GetAssetPath(preset);
+            if (!string.IsNullOrEmpty(path))
+            {
+                EditorPrefs.SetString(LastPresetPrefKey, AssetDatabase.AssetPathToGUID(path));
+            }
+
+            if (jumpToStep)
+            {
+                currentStep = FirstIncompleteStep();
+            }
+        }
+
+        private EnvStep FirstIncompleteStep()
+        {
+            for (int i = 0; i <= 7; i++)
+            {
+                if (!IsStepComplete((EnvStep)i)) return (EnvStep)i;
+            }
+            return EnvStep.S7_Finalize;
+        }
+
+        private bool IsStepComplete(EnvStep s)
+        {
+            if (preset == null) return false;
+            switch (s)
+            {
+                case EnvStep.S0_NameFolder:
+                    return true; // preset exists
+                case EnvStep.S1_HDRI:
+                    return preset.hdriTexture != null && preset.skyboxMaterial != null;
+                case EnvStep.S2_LightingSettings:
+                    return preset.lightingSettings != null;
+                case EnvStep.S3_StaticFlags:
+                    // Layer/Tag mode counts as configured; manual mode needs entries.
+                    return preset.staticTargetSource != StaticTargetSource.ManualList
+                        || (preset.staticTargets != null && preset.staticTargets.Count > 0);
+                case EnvStep.S4_LightProbes:
+                    return preset.lightProbeGroup != null;
+                case EnvStep.S5_ReflectionProbes:
+                    return preset.reflectionProbes != null && preset.reflectionProbes.Count > 0
+                        && preset.reflectionProbes[0] != null;
+                case EnvStep.S6_Bake:
+                    return Lightmapping.lightingDataAsset != null;
+                case EnvStep.S7_Finalize:
+                    return preset.phase == BOSSLookPhase.Finalized;
+                default:
+                    return false;
+            }
+        }
+
+        // ---------------- Scene view (probe area gizmo) ----------------
+
+        private void OnSceneGUI(SceneView sceneView)
+        {
+            if (preset == null) return;
+            if (currentModule != Module.A_Environment || currentStep != EnvStep.S4_LightProbes) return;
+
+            Handles.color = new Color(0.3f, 1f, 0.6f, 1f);
+            probeAreaHandle.center = preset.probeArea.center;
+            probeAreaHandle.size = preset.probeArea.size;
+            probeAreaHandle.wireframeColor = Handles.color;
+            probeAreaHandle.handleColor = Color.white;
+
+            EditorGUI.BeginChangeCheck();
+            probeAreaHandle.DrawHandle();
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(preset, "Edit Probe Area");
+                preset.probeArea = new Bounds(probeAreaHandle.center, probeAreaHandle.size);
+                EditorUtility.SetDirty(preset);
+                Repaint();
+            }
+
+            Handles.Label(preset.probeArea.center + Vector3.up * (preset.probeArea.extents.y + 0.3f),
+                "Probe Area (BOSS Look)");
         }
 
         private void OnInspectorUpdate()
@@ -101,11 +230,13 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                     "Preset", preset, typeof(BOSSLookPreset), false);
                 if (EditorGUI.EndChangeCheck())
                 {
-                    preset = picked;
-                    if (preset != null)
+                    if (picked != null)
                     {
-                        newBaseName = preset.baseName;
-                        newFolderPath = SafeParent(preset.folderPath);
+                        AdoptPreset(picked, jumpToStep: true);
+                    }
+                    else
+                    {
+                        preset = null;
                     }
                 }
             }
@@ -181,7 +312,8 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                 {
                     var s = (EnvStep)i;
                     bool on = currentStep == s;
-                    if (GUILayout.Toggle(on, i.ToString(), EditorStyles.toolbarButton, GUILayout.Width(28f)) != on)
+                    string label = IsStepComplete(s) ? $"{i}✓" : i.ToString();
+                    if (GUILayout.Toggle(on, label, EditorStyles.toolbarButton, GUILayout.Width(34f)) != on)
                     {
                         currentStep = s;
                     }
@@ -218,13 +350,14 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             {
                 if (GUILayout.Button(preset == null ? "プリセットを作成 (初期値を書き込む)" : "プリセットを更新 (フォルダ / 名前)"))
                 {
-                    preset = EnvironmentOps.CreateOrLoadPreset(newBaseName, newFolderPath);
-                    if (preset.phase == BOSSLookPhase.NotCreated)
+                    var created = EnvironmentOps.CreateOrLoadPreset(newBaseName, newFolderPath);
+                    if (created.phase == BOSSLookPhase.NotCreated)
                     {
-                        preset.phase = BOSSLookPhase.Active;
-                        EditorUtility.SetDirty(preset);
+                        created.phase = BOSSLookPhase.Active;
+                        EditorUtility.SetDirty(created);
                     }
-                    Selection.activeObject = preset;
+                    AdoptPreset(created, jumpToStep: true);
+                    Selection.activeObject = created;
                 }
             }
 
@@ -241,8 +374,19 @@ namespace DarataBOSS.BOSSLookPreset.Editor
 
             preset.hdriTexture = (Texture)EditorGUILayout.ObjectField(
                 "HDRI Texture", preset.hdriTexture, typeof(Texture), false);
+
+            EditorGUI.BeginChangeCheck();
             preset.environmentIntensity = EditorGUILayout.Slider(
                 "Environment Intensity", preset.environmentIntensity, 0f, 8f);
+            if (EditorGUI.EndChangeCheck() && preset.skyboxMaterial != null)
+            {
+                // Live preview: the slider drives the scene directly once a
+                // skybox exists, no regenerate button needed.
+                RenderSettings.ambientIntensity = preset.environmentIntensity;
+                RenderSettings.reflectionIntensity = preset.environmentIntensity;
+                DynamicGI.UpdateEnvironment();
+                EditorUtility.SetDirty(preset);
+            }
 
             EditorGUILayout.HelpBox(
                 "Texture2D ならパノラマ (Skybox/Panoramic)、Cubemap なら Skybox/Cubemap として自動でスカイボックスマテリアルを作ります。",
@@ -254,7 +398,19 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                 {
                     EnvironmentOps.SetupSkybox(preset);
                 }
+
+                EditorGUILayout.Space(2);
+                if (GUILayout.Button("おまかせセットアップ (Step 1〜5 を一括実行)", GUILayout.Height(28f)))
+                {
+                    string report = EnvironmentOps.AutoSetupAll(preset);
+                    Debug.Log($"[BOSS Look] おまかせセットアップ:\n{report}");
+                    EditorUtility.DisplayDialog("BOSS Look Preset — おまかせセットアップ", report, "OK");
+                    currentStep = EnvStep.S6_Bake;
+                }
             }
+            EditorGUILayout.HelpBox(
+                "おまかせ: スカイボックス〜リフレクションまでシーン全体の自動計算で一括設定し、ベイクステップへ進みます。結果は各ステップで個別に調整できます。",
+                MessageType.None);
 
             preset.skyboxMaterial = (Material)EditorGUILayout.ObjectField(
                 "Skybox Material", preset.skyboxMaterial, typeof(Material), false);
@@ -333,6 +489,10 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                 EditorGUILayout.HelpBox(
                     $"{lastMissingUv2.Count} 個のメッシュで UV2 が空です。ImportSettings で Generate Lightmap UVs を有効にすると解決します。",
                     MessageType.Warning);
+                if (GUILayout.Button("該当オブジェクトを選択"))
+                {
+                    Selection.objects = lastMissingUv2.ToArray();
+                }
             }
         }
 
@@ -342,6 +502,9 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             if (!RequirePreset()) return;
 
             EditorGUILayout.LabelField("Probe Area (World Bounds)", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(
+                "このステップを開いている間、シーンビューに緑のボックスが表示されます。ハンドルをドラッグして範囲を直接編集できます。",
+                MessageType.Info);
             preset.probeArea.center = EditorGUILayout.Vector3Field("Center", preset.probeArea.center);
             preset.probeArea.size = EditorGUILayout.Vector3Field("Size", preset.probeArea.size);
 
@@ -396,7 +559,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             EditorGUILayout.HelpBox(
                 preset.reflectionMode == ReflectionBakeMode.A_UseHDRI
                     ? "A: HDRI そのままで焼きます。空が反射に焼き込まれる点に注意。"
-                    : "B: ニュートラルなスカイボックスに一時的に差し替えて焼きます (今回は実装未完: A と同じ動作)。",
+                    : "B: プローブの背景をニュートラルグレー (SolidColor) にして焼きます。空は反射に映り込みません (環境光のGIには影響しません)。",
                 MessageType.Info);
 
             preset.reflectionBoxPadding = EditorGUILayout.FloatField("Box Padding", preset.reflectionBoxPadding);
@@ -438,11 +601,17 @@ namespace DarataBOSS.BOSSLookPreset.Editor
 
             if (Lightmapping.isRunning)
             {
-                EditorGUILayout.LabelField($"Baking... {Lightmapping.buildProgress * 100f:F1}%");
+                var rect = GUILayoutUtility.GetRect(18f, 22f, GUILayout.ExpandWidth(true));
+                EditorGUI.ProgressBar(rect, Lightmapping.buildProgress,
+                    $"Baking... {Lightmapping.buildProgress * 100f:F1}%");
                 if (GUILayout.Button("ベイクをキャンセル"))
                 {
                     EnvironmentOps.CancelBake();
                 }
+            }
+            else if (IsStepComplete(EnvStep.S6_Bake))
+            {
+                EditorGUILayout.HelpBox("ベイク済みのライティングデータがあります。", MessageType.None);
             }
         }
 
@@ -519,6 +688,24 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                 "被写体を中心に Key / Fill / Back を配置します。既定は Mixed なのでベイクループに乗ります。",
                 MessageType.Info);
 
+            if (!LightRigOps.ColorTemperatureSupported)
+            {
+                EditorGUILayout.HelpBox(
+                    "Graphics Settings で「Lights Use Color Temperature」が無効なため、Kelvin 指定が効きません。",
+                    MessageType.Warning);
+                if (GUILayout.Button("色温度を有効化 (Linear Intensity + Color Temperature)"))
+                {
+                    if (EditorUtility.DisplayDialog("BOSS Look Preset",
+                            "GraphicsSettings.lightsUseLinearIntensity / lightsUseColorTemperature を ON にします。\n" +
+                            "既存ライトの見え方が変わる可能性があります。よろしいですか?",
+                            "有効化", "キャンセル"))
+                    {
+                        LightRigOps.EnableColorTemperature();
+                    }
+                }
+            }
+
+            EditorGUI.BeginChangeCheck();
             preset.subject = (Transform)EditorGUILayout.ObjectField("Subject", preset.subject, typeof(Transform), true);
             preset.rigLightKind = (RigLightKind)EditorGUILayout.EnumPopup("Light Type", preset.rigLightKind);
             preset.keyIntensity = EditorGUILayout.FloatField("Key Intensity", preset.keyIntensity);
@@ -534,6 +721,13 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             else
             {
                 preset.areaSize = EditorGUILayout.Vector2Field("Area Size", preset.areaSize);
+                EditorGUILayout.HelpBox("Area ライトは Baked 専用です (Mixed 不可)。", MessageType.None);
+            }
+            // Live apply: once the rig exists, parameter tweaks update the
+            // scene immediately so lighting can be dialed in by eye.
+            if (EditorGUI.EndChangeCheck() && preset.keyLight != null)
+            {
+                LightRigOps.CreateOrUpdateRig(preset);
             }
 
             EditorGUILayout.Space(4);
@@ -561,6 +755,11 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             EditorGUILayout.Space(4);
             if (GUILayout.Button("3点リグを生成 / 更新"))
             {
+                if (preset.subject == null && Selection.activeTransform != null)
+                {
+                    preset.subject = Selection.activeTransform;
+                    Debug.Log($"[BOSS Look] Subject 未指定のため選択中の \"{preset.subject.name}\" を被写体にしました。");
+                }
                 LightRigOps.CreateOrUpdateRig(preset);
             }
             if (GUILayout.Button("リグを削除"))

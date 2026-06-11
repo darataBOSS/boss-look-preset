@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -164,7 +165,10 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 
             preset.lightingSettings = settings;
             Lightmapping.lightingSettings = settings;
+#if !UNITY_6000_0_OR_NEWER
+            // Obsolete in Unity 6; settings.autoGenerate = false covers it there.
             Lightmapping.giWorkflowMode = Lightmapping.GIWorkflowMode.OnDemand;
+#endif
 
             EditorUtility.SetDirty(preset);
             return settings;
@@ -210,7 +214,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
                     }
                     break;
                 case StaticTargetSource.LayerMask:
-                    foreach (var go in Object.FindObjectsOfType<MeshRenderer>())
+                    foreach (var go in SceneRelinkOps.FindAllInScene<MeshRenderer>())
                     {
                         if (((1 << go.gameObject.layer) & preset.targetLayerMask.value) != 0)
                         {
@@ -235,6 +239,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 
         public static LightProbeGroup CreateOrUpdateProbeGroup(BOSSLookPreset preset)
         {
+            SceneRelinkOps.RelinkAll(preset);
             var group = preset.lightProbeGroup;
             if (group == null)
             {
@@ -292,6 +297,8 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 
         public static ReflectionProbe CreateOrUpdateReflectionProbe(BOSSLookPreset preset)
         {
+            SceneRelinkOps.RelinkAll(preset);
+
             ReflectionProbe probe = null;
             if (preset.reflectionProbes != null && preset.reflectionProbes.Count > 0)
             {
@@ -314,6 +321,19 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             probe.boxProjection = true;
             probe.center = preset.probeArea.center - probe.transform.position;
             probe.size = preset.probeArea.size + Vector3.one * preset.reflectionBoxPadding * 2f;
+
+            // Mode B: render the probe background as neutral gray instead of the
+            // skybox, so the HDRI sky never bakes into reflections. The sky still
+            // contributes to ambient GI — this only affects the probe's own render.
+            if (preset.reflectionMode == ReflectionBakeMode.B_NeutralReplace)
+            {
+                probe.clearFlags = ReflectionProbeClearFlags.SolidColor;
+                probe.backgroundColor = new Color(0.5f, 0.5f, 0.5f, 1f);
+            }
+            else
+            {
+                probe.clearFlags = ReflectionProbeClearFlags.Skybox;
+            }
 
             EditorUtility.SetDirty(probe);
             EditorUtility.SetDirty(preset);
@@ -350,7 +370,9 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
                 EditorUtility.DisplayDialog("BOSS Look Preset", reason, "OK");
                 return;
             }
+#if !UNITY_6000_0_OR_NEWER
             Lightmapping.giWorkflowMode = Lightmapping.GIWorkflowMode.OnDemand;
+#endif
             Lightmapping.lightingSettings = preset.lightingSettings;
             Lightmapping.BakeAsync();
         }
@@ -375,6 +397,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
                 return;
             }
 
+            Undo.RecordObject(preset, "AR化 (Finalize)");
             preset.stashedSkybox = RenderSettings.skybox;
             RenderSettings.skybox = null;
             DynamicGI.UpdateEnvironment();
@@ -385,6 +408,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
         public static void Unfinalize(BOSSLookPreset preset)
         {
             if (preset == null) return;
+            Undo.RecordObject(preset, "AR化を解除 (Unfinalize)");
             Material restore = preset.stashedSkybox != null ? preset.stashedSkybox : preset.skyboxMaterial;
             if (restore != null)
             {
@@ -393,6 +417,66 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             }
             preset.phase = BOSSLookPhase.Active;
             EditorUtility.SetDirty(preset);
+        }
+
+        // ---------------- One-click setup ----------------
+
+        /// <summary>Runs Step 1–5 in one go with scene-derived bounds.
+        /// Everything it does is the same as the individual steps, so the
+        /// result remains fully adjustable afterwards.</summary>
+        public static string AutoSetupAll(BOSSLookPreset preset)
+        {
+            if (preset == null) return "プリセットがありません。";
+            if (preset.hdriTexture == null) return "HDRI テクスチャを先に指定してください (Step 1)。";
+
+            var report = new StringBuilder();
+
+            SetupSkybox(preset);
+            report.AppendLine("✓ スカイボックス生成・環境光を Skybox に設定");
+
+            CreateOrUpdateLightingSettings(preset);
+            report.AppendLine("✓ Lighting Settings 生成 (Auto Generate OFF)");
+
+            // Scene bounds from every mesh renderer
+            var renderers = new List<MeshRenderer>(SceneRelinkOps.FindAllInScene<MeshRenderer>());
+            renderers.RemoveAll(r => r == null);
+            if (renderers.Count > 0)
+            {
+                Bounds b = renderers[0].bounds;
+                foreach (var r in renderers) b.Encapsulate(r.bounds);
+                b.Expand(0.5f);
+                preset.probeArea = b;
+                report.AppendLine($"✓ プローブ範囲をシーン全体から自動設定 ({renderers.Count} renderers)");
+            }
+            else
+            {
+                report.AppendLine("⚠ MeshRenderer が無いためプローブ範囲は既定値のまま");
+            }
+
+            // Static targets: if the manual list is empty, fill it with the whole
+            // scene so the user can prune it afterwards instead of starting blind.
+            if (preset.staticTargetSource == StaticTargetSource.ManualList &&
+                (preset.staticTargets == null || preset.staticTargets.Count == 0))
+            {
+                preset.staticTargets = new List<GameObject>();
+                foreach (var r in renderers) preset.staticTargets.Add(r.gameObject);
+                report.AppendLine($"✓ スタティック対象リストにシーンの全 MeshRenderer を投入 ({renderers.Count} 個)");
+            }
+            int flagged = ApplyStaticFlags(preset, out var missingUv2);
+            report.AppendLine($"✓ ContributeGI 付与 ({flagged} 個)");
+            if (missingUv2.Count > 0)
+            {
+                report.AppendLine($"⚠ UV2 が空のメッシュ {missingUv2.Count} 個 (Generate Lightmap UVs を確認)");
+            }
+
+            CreateOrUpdateProbeGroup(preset);
+            report.AppendLine("✓ ライトプローブグリッド生成");
+
+            CreateOrUpdateReflectionProbe(preset);
+            report.AppendLine("✓ リフレクションプローブ生成 (Baked)");
+
+            EditorUtility.SetDirty(preset);
+            return report.ToString();
         }
     }
 }
