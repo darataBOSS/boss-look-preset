@@ -35,6 +35,47 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         private static string LastPresetPrefKey =>
             "BOSSLook.LastPresetGUID." + Application.dataPath.GetHashCode();
 
+        // Button palette: green = generate, blue = auto, orange = bake,
+        // purple = finalize, red = destructive.
+        private static readonly Color ColorGenerate = new Color(0.6f, 0.9f, 0.6f);
+        private static readonly Color ColorAuto = new Color(0.5f, 0.78f, 1f);
+        private static readonly Color ColorBake = new Color(1f, 0.72f, 0.35f);
+        private static readonly Color ColorFinalize = new Color(0.82f, 0.65f, 1f);
+        private static readonly Color ColorDanger = new Color(1f, 0.55f, 0.55f);
+        private static readonly Color ColorStepDone = new Color(0.6f, 1f, 0.6f);
+
+        private static bool ColoredButton(string label, Color tint, params GUILayoutOption[] options)
+        {
+            var prev = GUI.backgroundColor;
+            GUI.backgroundColor = tint;
+            bool pressed = GUILayout.Button(label, options);
+            GUI.backgroundColor = prev;
+            return pressed;
+        }
+
+        /// <summary>Seeds Base Name / Parent Folder from the open scene so the
+        /// generated assets land next to (and named after) the scene.</summary>
+        private void ApplySceneBasedDefaults(bool force)
+        {
+            if (!force &&
+                (newBaseName != BOSSLookDefaults.DefaultBaseName ||
+                 newFolderPath != BOSSLookDefaults.DefaultFolderRoot))
+            {
+                return; // the user already typed something — don't stomp it
+            }
+
+            var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            if (!string.IsNullOrEmpty(scene.name))
+            {
+                newBaseName = scene.name;
+            }
+            if (!string.IsNullOrEmpty(scene.path))
+            {
+                string dir = System.IO.Path.GetDirectoryName(scene.path)?.Replace('\\', '/');
+                if (!string.IsNullOrEmpty(dir)) newFolderPath = dir;
+            }
+        }
+
         [MenuItem("BOSS/Look Preset")]
         public static void Open()
         {
@@ -56,6 +97,10 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             {
                 SceneRelinkOps.RelinkAll(preset);
                 AdoptPreset(preset, jumpToStep: false);
+            }
+            else
+            {
+                ApplySceneBasedDefaults(force: false);
             }
         }
 
@@ -312,11 +357,15 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                 {
                     var s = (EnvStep)i;
                     bool on = currentStep == s;
-                    string label = IsStepComplete(s) ? $"{i}✓" : i.ToString();
+                    bool done = IsStepComplete(s);
+                    string label = done ? $"{i}✓" : i.ToString();
+                    var prev = GUI.backgroundColor;
+                    if (done) GUI.backgroundColor = ColorStepDone;
                     if (GUILayout.Toggle(on, label, EditorStyles.toolbarButton, GUILayout.Width(34f)) != on)
                     {
                         currentStep = s;
                     }
+                    GUI.backgroundColor = prev;
                 }
             }
             EditorGUILayout.LabelField($"Step {(int)currentStep}: {StepTitle(currentStep)}", EditorStyles.boldLabel);
@@ -341,14 +390,35 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         // ---- S0 ----
         private void DrawS0()
         {
-            EditorGUILayout.LabelField("プリセットのベース名と親フォルダを指定し、生成します。",
+            EditorGUILayout.LabelField("保存先と名前", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(
+                "「親フォルダ」の下に「ベース名」のフォルダを作り、プリセット・マテリアル・Lighting Settings をそこへ生成します。" +
+                "初期値は開いているシーンの名前と場所から自動入力されます。",
                 EditorStyles.wordWrappedLabel);
-            newBaseName = EditorGUILayout.TextField("Base Name", newBaseName);
-            newFolderPath = EditorGUILayout.TextField("Parent Folder", newFolderPath);
+            EditorGUILayout.Space(2);
 
+            // Parent above child, mirroring the actual folder hierarchy.
+            newFolderPath = EditorGUILayout.TextField("📁 親フォルダ", newFolderPath);
+            using (new EditorGUI.IndentLevelScope())
+            {
+                newBaseName = EditorGUILayout.TextField("└ ベース名 (フォルダ名)", newBaseName);
+            }
+
+            EditorGUILayout.HelpBox(
+                $"生成先:\n{newFolderPath}/{newBaseName}/{newBaseName}_Preset.asset",
+                MessageType.None);
+
+            if (GUILayout.Button("開いているシーンから名前を再取得"))
+            {
+                ApplySceneBasedDefaults(force: true);
+            }
+
+            EditorGUILayout.Space(4);
             using (new EditorGUI.DisabledScope(string.IsNullOrEmpty(newBaseName)))
             {
-                if (GUILayout.Button(preset == null ? "プリセットを作成 (初期値を書き込む)" : "プリセットを更新 (フォルダ / 名前)"))
+                if (ColoredButton(
+                        preset == null ? "プリセットを作成 (初期値を書き込む)" : "プリセットを更新 (フォルダ / 名前)",
+                        ColorGenerate, GUILayout.Height(28f)))
                 {
                     var created = EnvironmentOps.CreateOrLoadPreset(newBaseName, newFolderPath);
                     if (created.phase == BOSSLookPhase.NotCreated)
@@ -359,11 +429,6 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                     AdoptPreset(created, jumpToStep: true);
                     Selection.activeObject = created;
                 }
-            }
-
-            if (preset != null)
-            {
-                EditorGUILayout.HelpBox($"生成先: {preset.folderPath}", MessageType.None);
             }
         }
 
@@ -394,13 +459,13 @@ namespace DarataBOSS.BOSSLookPreset.Editor
 
             using (new EditorGUI.DisabledScope(preset.hdriTexture == null))
             {
-                if (GUILayout.Button("スカイボックスを生成 / 更新"))
+                if (ColoredButton("スカイボックスを生成 / 更新", ColorGenerate))
                 {
                     EnvironmentOps.SetupSkybox(preset);
                 }
 
                 EditorGUILayout.Space(2);
-                if (GUILayout.Button("おまかせセットアップ (Step 1〜5 を一括実行)", GUILayout.Height(28f)))
+                if (ColoredButton("⚡ おまかせセットアップ (Step 1〜5 を一括実行)", ColorAuto, GUILayout.Height(28f)))
                 {
                     string report = EnvironmentOps.AutoSetupAll(preset);
                     Debug.Log($"[BOSS Look] おまかせセットアップ:\n{report}");
@@ -434,7 +499,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             preset.compressLightmaps = EditorGUILayout.Toggle("Compress Lightmaps", preset.compressLightmaps);
             preset.ambientOcclusion = EditorGUILayout.Toggle("Ambient Occlusion", preset.ambientOcclusion);
 
-            if (GUILayout.Button("Lighting Settings を生成 / 更新 (Auto Generate OFF)"))
+            if (ColoredButton("Lighting Settings を生成 / 更新 (Auto Generate OFF)", ColorGenerate))
             {
                 EnvironmentOps.CreateOrUpdateLightingSettings(preset);
             }
@@ -478,7 +543,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                     break;
             }
 
-            if (GUILayout.Button("ContributeGI を付与"))
+            if (ColoredButton("ContributeGI を付与", ColorGenerate))
             {
                 int n = EnvironmentOps.ApplyStaticFlags(preset, out lastMissingUv2);
                 Debug.Log($"[BOSS Look] ContributeGI を {n} 個に付与しました。");
@@ -521,7 +586,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                 preset.colliderCheckRadius = EditorGUILayout.FloatField("Collider Check Radius", preset.colliderCheckRadius);
             }
 
-            if (GUILayout.Button("ライトプローブグリッドを生成 / 更新"))
+            if (ColoredButton("ライトプローブグリッドを生成 / 更新", ColorGenerate))
             {
                 EnvironmentOps.CreateOrUpdateProbeGroup(preset);
             }
@@ -564,7 +629,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
 
             preset.reflectionBoxPadding = EditorGUILayout.FloatField("Box Padding", preset.reflectionBoxPadding);
 
-            if (GUILayout.Button("Reflection Probe を生成 / 更新 (Baked)"))
+            if (ColoredButton("Reflection Probe を生成 / 更新 (Baked)", ColorGenerate))
             {
                 EnvironmentOps.CreateOrUpdateReflectionProbe(preset);
             }
@@ -593,7 +658,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
 
             using (new EditorGUI.DisabledScope(!canBake || Lightmapping.isRunning))
             {
-                if (GUILayout.Button("ベイクを実行"))
+                if (ColoredButton("🔥 ベイクを実行", ColorBake, GUILayout.Height(28f)))
                 {
                     EnvironmentOps.StartBake(preset);
                 }
@@ -604,7 +669,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                 var rect = GUILayoutUtility.GetRect(18f, 22f, GUILayout.ExpandWidth(true));
                 EditorGUI.ProgressBar(rect, Lightmapping.buildProgress,
                     $"Baking... {Lightmapping.buildProgress * 100f:F1}%");
-                if (GUILayout.Button("ベイクをキャンセル"))
+                if (ColoredButton("ベイクをキャンセル", ColorDanger))
                 {
                     EnvironmentOps.CancelBake();
                 }
@@ -627,7 +692,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
 
             using (new EditorGUI.DisabledScope(preset.phase == BOSSLookPhase.Finalized))
             {
-                if (GUILayout.Button("AR化する (スカイボックスOFF)"))
+                if (ColoredButton("📦 AR化する (スカイボックスOFF)", ColorFinalize, GUILayout.Height(28f)))
                 {
                     EnvironmentOps.Finalize(preset);
                 }
@@ -742,7 +807,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                     LightRigOps.RestoreStashedLights(preset);
                 }
             }
-            if (GUILayout.Button("退避ライトを完全に削除"))
+            if (ColoredButton("退避ライトを完全に削除", ColorDanger))
             {
                 if (EditorUtility.DisplayDialog("BOSS Look Preset",
                         "退避中のディレクショナルライトをシーンから削除します。よろしいですか?",
@@ -753,7 +818,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             }
 
             EditorGUILayout.Space(4);
-            if (GUILayout.Button("3点リグを生成 / 更新"))
+            if (ColoredButton("3点リグを生成 / 更新", ColorGenerate, GUILayout.Height(28f)))
             {
                 if (preset.subject == null && Selection.activeTransform != null)
                 {
@@ -762,7 +827,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                 }
                 LightRigOps.CreateOrUpdateRig(preset);
             }
-            if (GUILayout.Button("リグを削除"))
+            if (ColoredButton("リグを削除", ColorDanger))
             {
                 if (EditorUtility.DisplayDialog("BOSS Look Preset",
                         "ライトリグをシーンから削除します。よろしいですか?",
@@ -829,11 +894,11 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             }
 
             EditorGUILayout.Space(4);
-            if (GUILayout.Button("ポストプロセスをセットアップ / 更新"))
+            if (ColoredButton("ポストプロセスをセットアップ / 更新", ColorGenerate, GUILayout.Height(28f)))
             {
                 PostProcessOps.Setup(preset);
             }
-            if (GUILayout.Button("ポストプロセスを外す (Volume / Layer 除去)"))
+            if (ColoredButton("ポストプロセスを外す (Volume / Layer 除去)", ColorDanger))
             {
                 if (EditorUtility.DisplayDialog("BOSS Look Preset",
                         "シーンの Volume / Post Process Volume / Post Process Layer を除去します。Profile アセットは残します。",

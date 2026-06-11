@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-06-11
+
+### Added
+- Step 0 defaults are seeded from the open scene: Base Name = scene name,
+  Parent Folder = the scene's directory, so look assets land next to the scene
+  they belong to. A "re-read from scene" button refreshes them.
+- Step 0 now shows the fields in parent → child order with a live
+  "生成先" path preview, making the folder hierarchy obvious.
+- Color-coded buttons across the wizard: green = generate/update,
+  blue = auto setup, orange = bake, purple = finalize (AR化),
+  red = destructive (delete/remove/cancel). Completed steps in the step strip
+  are tinted green.
+
 ## [0.3.0] - 2026-06-11
 
 ### Fixed (robustness)
