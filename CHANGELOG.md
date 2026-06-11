@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-06-11
+
+### Added
+- **Light rig types** (Module B): the rig is now selectable between three
+  setups sharing one rig root. Switching types rebuilds in place and removes
+  lights that belong to the other types.
+  - **3点照明 (ThreePoint)** — the existing subject-focused Key/Fill/Back.
+  - **太陽光 (Sun)** — outdoor: a Mixed directional sun (elevation / azimuth /
+    intensity / Kelvin) plus an optional Baked "sky fill" from the opposite
+    side. Quick presets: 昼 / 朝・夕 / 曇り. The realtime (Mixed) sun also
+    makes the Built-in ground-shadow catcher work out of the box.
+  - **シーリンググリッド (CeilingGrid)** — large interiors: an N×M grid of
+    downward lights (Spot / Point / Area) covering the probe area, placed at
+    the box's top face. All Baked so the runtime cost is zero; dynamic objects
+    are lit via light probes.
+- Scene relink, lint, and the stash logic understand the new rig types
+  (the rig's own Sun is never stashed as an "existing" directional).
+
 ## [0.5.0] - 2026-06-11
 
 ### Added

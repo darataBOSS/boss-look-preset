@@ -756,10 +756,36 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         {
             if (!RequirePreset()) return;
 
-            EditorGUILayout.LabelField("3点ライトリグ (Spot / Area)", EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox(
-                "被写体を中心に Key / Fill / Back を配置します。既定は Mixed なのでベイクループに乗ります。",
-                MessageType.Info);
+            EditorGUILayout.LabelField("ライトリグ", EditorStyles.boldLabel);
+
+            EditorGUI.BeginChangeCheck();
+            preset.rigType = (RigType)EditorGUILayout.EnumPopup("リグタイプ", preset.rigType);
+            if (EditorGUI.EndChangeCheck() && preset.rigRoot != null)
+            {
+                // Rebuild in place so switching types swaps the lights cleanly.
+                LightRigOps.CreateOrUpdateRig(preset);
+            }
+
+            switch (preset.rigType)
+            {
+                case RigType.ThreePoint:
+                    EditorGUILayout.HelpBox(
+                        "被写体フォーカス: Key / Fill / Back の3点を被写体に向けて配置します。単体オブジェクトのAR向け。既定は Mixed。",
+                        MessageType.Info);
+                    break;
+                case RigType.Sun:
+                    EditorGUILayout.HelpBox(
+                        "屋外: Directional の太陽 + 空からの柔らかいフィルを配置します。広い屋外シーン向け。" +
+                        "太陽は Mixed なので Built-in のグラウンドシャドウとも相性が良いです。",
+                        MessageType.Info);
+                    break;
+                case RigType.CeilingGrid:
+                    EditorGUILayout.HelpBox(
+                        "広い室内: Step 4 のプローブ範囲 (緑ボックス) を天井とみなし、下向きライトを格子状に並べます。" +
+                        "全灯 Baked なので実行時負荷ゼロ。動くオブジェクトへはライトプローブが照明を供給します。",
+                        MessageType.Info);
+                    break;
+            }
 
             if (!LightRigOps.ColorTemperatureSupported)
             {
@@ -779,26 +805,15 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             }
 
             EditorGUI.BeginChangeCheck();
-            preset.subject = (Transform)EditorGUILayout.ObjectField("Subject", preset.subject, typeof(Transform), true);
-            preset.rigLightKind = (RigLightKind)EditorGUILayout.EnumPopup("Light Type", preset.rigLightKind);
-            preset.keyIntensity = EditorGUILayout.FloatField("Key Intensity", preset.keyIntensity);
-            preset.keyFillRatio = EditorGUILayout.Slider("Key:Fill Ratio", preset.keyFillRatio, 1f, 8f);
-            preset.keyColorTemperatureKelvin = EditorGUILayout.FloatField("Key Color Temp (K)", preset.keyColorTemperatureKelvin);
-            preset.fillColorTemperatureKelvin = EditorGUILayout.FloatField("Fill Color Temp (K)", preset.fillColorTemperatureKelvin);
-            preset.backColorTemperatureKelvin = EditorGUILayout.FloatField("Back Color Temp (K)", preset.backColorTemperatureKelvin);
-
-            if (preset.rigLightKind == RigLightKind.Spot)
+            switch (preset.rigType)
             {
-                preset.spotAngleDeg = EditorGUILayout.Slider("Spot Angle", preset.spotAngleDeg, 1f, 179f);
-            }
-            else
-            {
-                preset.areaSize = EditorGUILayout.Vector2Field("Area Size", preset.areaSize);
-                EditorGUILayout.HelpBox("Area ライトは Baked 専用です (Mixed 不可)。", MessageType.None);
+                case RigType.ThreePoint: DrawThreePointParams(); break;
+                case RigType.Sun: DrawSunParams(); break;
+                case RigType.CeilingGrid: DrawCeilingGridParams(); break;
             }
             // Live apply: once the rig exists, parameter tweaks update the
             // scene immediately so lighting can be dialed in by eye.
-            if (EditorGUI.EndChangeCheck() && preset.keyLight != null)
+            if (EditorGUI.EndChangeCheck() && LightRigOps.RigExists(preset))
             {
                 LightRigOps.CreateOrUpdateRig(preset);
             }
@@ -826,9 +841,10 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             }
 
             EditorGUILayout.Space(4);
-            if (ColoredButton("3点リグを生成 / 更新", ColorGenerate, GUILayout.Height(28f)))
+            if (ColoredButton("リグを生成 / 更新", ColorGenerate, GUILayout.Height(28f)))
             {
-                if (preset.subject == null && Selection.activeTransform != null)
+                if (preset.rigType != RigType.CeilingGrid &&
+                    preset.subject == null && Selection.activeTransform != null)
                 {
                     preset.subject = Selection.activeTransform;
                     Debug.Log($"[BOSS Look] Subject 未指定のため選択中の \"{preset.subject.name}\" を被写体にしました。");
@@ -848,9 +864,108 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             EditorGUILayout.Space(4);
             EditorGUILayout.LabelField("Generated", EditorStyles.boldLabel);
             preset.rigRoot = (GameObject)EditorGUILayout.ObjectField("Rig Root", preset.rigRoot, typeof(GameObject), true);
-            preset.keyLight = (Light)EditorGUILayout.ObjectField("Key", preset.keyLight, typeof(Light), true);
-            preset.fillLight = (Light)EditorGUILayout.ObjectField("Fill", preset.fillLight, typeof(Light), true);
-            preset.backLight = (Light)EditorGUILayout.ObjectField("Back", preset.backLight, typeof(Light), true);
+            switch (preset.rigType)
+            {
+                case RigType.ThreePoint:
+                    preset.keyLight = (Light)EditorGUILayout.ObjectField("Key", preset.keyLight, typeof(Light), true);
+                    preset.fillLight = (Light)EditorGUILayout.ObjectField("Fill", preset.fillLight, typeof(Light), true);
+                    preset.backLight = (Light)EditorGUILayout.ObjectField("Back", preset.backLight, typeof(Light), true);
+                    break;
+                case RigType.Sun:
+                    preset.sunLight = (Light)EditorGUILayout.ObjectField("Sun", preset.sunLight, typeof(Light), true);
+                    preset.skyFillLight = (Light)EditorGUILayout.ObjectField("Sky Fill", preset.skyFillLight, typeof(Light), true);
+                    break;
+                case RigType.CeilingGrid:
+                    int count = preset.gridLights != null ? preset.gridLights.Count : 0;
+                    EditorGUILayout.LabelField("Grid Lights", $"{count} 灯");
+                    break;
+            }
+        }
+
+        private void DrawThreePointParams()
+        {
+            preset.subject = (Transform)EditorGUILayout.ObjectField("Subject", preset.subject, typeof(Transform), true);
+            preset.rigLightKind = (RigLightKind)EditorGUILayout.EnumPopup("Light Type", preset.rigLightKind);
+            preset.keyIntensity = EditorGUILayout.FloatField("Key Intensity", preset.keyIntensity);
+            preset.keyFillRatio = EditorGUILayout.Slider("Key:Fill Ratio", preset.keyFillRatio, 1f, 8f);
+            preset.keyColorTemperatureKelvin = EditorGUILayout.FloatField("Key Color Temp (K)", preset.keyColorTemperatureKelvin);
+            preset.fillColorTemperatureKelvin = EditorGUILayout.FloatField("Fill Color Temp (K)", preset.fillColorTemperatureKelvin);
+            preset.backColorTemperatureKelvin = EditorGUILayout.FloatField("Back Color Temp (K)", preset.backColorTemperatureKelvin);
+
+            if (preset.rigLightKind == RigLightKind.Spot)
+            {
+                preset.spotAngleDeg = EditorGUILayout.Slider("Spot Angle", preset.spotAngleDeg, 1f, 179f);
+            }
+            else
+            {
+                preset.areaSize = EditorGUILayout.Vector2Field("Area Size", preset.areaSize);
+                EditorGUILayout.HelpBox("Area ライトは Baked 専用です (Mixed 不可)。", MessageType.None);
+            }
+        }
+
+        private void DrawSunParams()
+        {
+            preset.subject = (Transform)EditorGUILayout.ObjectField("Subject (任意)", preset.subject, typeof(Transform), true);
+            preset.sunElevationDeg = EditorGUILayout.Slider("太陽高度 (°)", preset.sunElevationDeg, 0f, 90f);
+            preset.sunAzimuthDeg = EditorGUILayout.Slider("方位角 (°)", preset.sunAzimuthDeg, 0f, 360f);
+            preset.sunIntensity = EditorGUILayout.FloatField("太陽強度", preset.sunIntensity);
+            preset.sunColorTemperatureKelvin = EditorGUILayout.FloatField("太陽色温度 (K)", preset.sunColorTemperatureKelvin);
+            preset.skyFillEnabled = EditorGUILayout.Toggle("空フィル (Baked)", preset.skyFillEnabled);
+            using (new EditorGUI.DisabledScope(!preset.skyFillEnabled))
+            {
+                preset.skyFillRatio = EditorGUILayout.Slider("太陽:フィル比", preset.skyFillRatio, 2f, 10f);
+                preset.skyFillColorTemperatureKelvin = EditorGUILayout.FloatField("フィル色温度 (K)", preset.skyFillColorTemperatureKelvin);
+            }
+
+            EditorGUILayout.LabelField("クイックプリセット", EditorStyles.miniBoldLabel);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("☀ 昼"))
+                {
+                    ApplySunPreset(elevation: 60f, intensity: 1.3f, kelvin: 5500f, fillRatio: 4f);
+                }
+                if (GUILayout.Button("🌅 朝・夕"))
+                {
+                    ApplySunPreset(elevation: 12f, intensity: 1.0f, kelvin: 3200f, fillRatio: 3f);
+                }
+                if (GUILayout.Button("☁ 曇り"))
+                {
+                    ApplySunPreset(elevation: 50f, intensity: 0.6f, kelvin: 6800f, fillRatio: 2f);
+                }
+            }
+        }
+
+        private void ApplySunPreset(float elevation, float intensity, float kelvin, float fillRatio)
+        {
+            preset.sunElevationDeg = elevation;
+            preset.sunIntensity = intensity;
+            preset.sunColorTemperatureKelvin = kelvin;
+            preset.skyFillRatio = fillRatio;
+            EditorUtility.SetDirty(preset);
+            if (LightRigOps.RigExists(preset))
+            {
+                LightRigOps.CreateOrUpdateRig(preset);
+            }
+        }
+
+        private void DrawCeilingGridParams()
+        {
+            EditorGUILayout.HelpBox(
+                $"配置範囲: プローブ範囲 (Step 4) を使用 — 中心 {preset.probeArea.center}, サイズ {preset.probeArea.size}。" +
+                "天井高はボックスの上面です。",
+                MessageType.None);
+            preset.gridRows = EditorGUILayout.IntSlider("行数 (奥行方向)", preset.gridRows, 1, 8);
+            preset.gridColumns = EditorGUILayout.IntSlider("列数 (横方向)", preset.gridColumns, 1, 8);
+            preset.gridLightKind = (GridLightKind)EditorGUILayout.EnumPopup("ライト種別", preset.gridLightKind);
+            preset.gridIntensity = EditorGUILayout.FloatField("強度 (1灯あたり)", preset.gridIntensity);
+            preset.gridColorTemperatureKelvin = EditorGUILayout.FloatField("色温度 (K)", preset.gridColorTemperatureKelvin);
+            if (preset.gridLightKind == GridLightKind.Spot)
+            {
+                preset.gridSpotAngle = EditorGUILayout.Slider("Spot Angle", preset.gridSpotAngle, 1f, 179f);
+            }
+            EditorGUILayout.HelpBox(
+                $"合計 {preset.gridRows * preset.gridColumns} 灯 (全て Baked)。4500K=オフィス白 / 3000K=電球色 / 6500K=昼光色。",
+                MessageType.None);
         }
 
         // ---------------- Module C: Post Process ----------------

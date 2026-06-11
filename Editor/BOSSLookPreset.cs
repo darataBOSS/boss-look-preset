@@ -30,6 +30,20 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         Area = 1,
     }
 
+    public enum RigType
+    {
+        ThreePoint = 0,   // 被写体フォーカス (Key/Fill/Back)
+        Sun = 1,          // 屋外: Directional 太陽 + 空フィル
+        CeilingGrid = 2,  // 広い室内: 天井ライトのグリッド
+    }
+
+    public enum GridLightKind
+    {
+        Spot = 0,
+        Point = 1,
+        Area = 2,
+    }
+
     public enum StaticTargetSource
     {
         ManualList = 0,
@@ -91,12 +105,33 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         public float reflectionBoxPadding = 0.5f;
 
         // ---- Light Rig ----
+        public RigType rigType = RigType.ThreePoint;
         public GameObject rigRoot;
         public Light keyLight;
         public Light fillLight;
         public Light backLight;
         public Transform subject;
         public RigLightKind rigLightKind = RigLightKind.Spot;
+
+        // Sun rig (outdoor)
+        public Light sunLight;
+        public Light skyFillLight;
+        [Range(0f, 90f)] public float sunElevationDeg = 50f;
+        [Range(0f, 360f)] public float sunAzimuthDeg = 30f;
+        public float sunIntensity = 1.2f;
+        public float sunColorTemperatureKelvin = 5500f;
+        public bool skyFillEnabled = true;
+        [Range(2f, 10f)] public float skyFillRatio = 4f;
+        public float skyFillColorTemperatureKelvin = 9000f;
+
+        // Ceiling grid rig (large interior); covers probeArea horizontally.
+        public List<Light> gridLights = new List<Light>();
+        [Range(1, 8)] public int gridRows = 2;
+        [Range(1, 8)] public int gridColumns = 3;
+        public GridLightKind gridLightKind = GridLightKind.Spot;
+        public float gridIntensity = 1.5f;
+        public float gridColorTemperatureKelvin = 4500f;
+        [Range(1f, 179f)] public float gridSpotAngle = 100f;
         [Range(1f, 8f)] public float keyFillRatio = 2.0f;
         public float keyIntensity = 2.0f;
         public float keyColorTemperatureKelvin = 5600f;

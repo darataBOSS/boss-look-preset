@@ -67,6 +67,20 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
                 if (preset.keyLight == null) preset.keyLight = FindRigLight(preset.rigRoot, "Key");
                 if (preset.fillLight == null) preset.fillLight = FindRigLight(preset.rigRoot, "Fill");
                 if (preset.backLight == null) preset.backLight = FindRigLight(preset.rigRoot, "Back");
+                if (preset.sunLight == null) preset.sunLight = FindRigLight(preset.rigRoot, "Sun");
+                if (preset.skyFillLight == null) preset.skyFillLight = FindRigLight(preset.rigRoot, "Sky Fill");
+
+                if (preset.gridLights == null) preset.gridLights = new List<Light>();
+                preset.gridLights.RemoveAll(l => l == null);
+                if (preset.gridLights.Count == 0)
+                {
+                    foreach (Transform child in preset.rigRoot.transform)
+                    {
+                        if (!child.name.Contains(" - Grid ")) continue;
+                        var l = child.GetComponent<Light>();
+                        if (l != null) preset.gridLights.Add(l);
+                    }
+                }
             }
 
             // Stashed directional lights, by recorded hierarchy path

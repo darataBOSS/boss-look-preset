@@ -94,7 +94,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 
         private static void CheckColorTemperature(BOSSLookPreset preset, List<LintIssue> issues)
         {
-            if (preset == null || preset.keyLight == null) return;
+            if (preset == null || !LightRigOps.RigExists(preset)) return;
             if (LightRigOps.ColorTemperatureSupported) return;
             issues.Add(new LintIssue
             {
