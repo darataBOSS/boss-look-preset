@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-06-11
+
+### Added
+- **Module D — 仕上げ (Finishing)**:
+  - **AR ground shadow (shadow catcher)**: one button creates a transparent
+    shadow-receiving plane under the subject so AR content doesn't float.
+    The shader is generated into the preset folder per active render pipeline
+    (Built-in: main directional shadows; URP: main + additional/spot shadows),
+    so the package itself never fails to import in projects without URP.
+    Opacity slider applies live; size follows the subject's footprint.
+  - **Fog / atmosphere**: RenderSettings distance fog driven by the preset
+    with live apply, plus a "suggest color from environment" button that
+    samples the ambient probe at the horizon to match the HDRI sky.
+- **Module E — ルック診断 (Look Lint)**: one-button diagnosis of common
+  look-killers with select / auto-fix actions per issue:
+  Gamma color space, near-white albedo (GI blowout), missing UV2 on
+  ContributeGI meshes, overly strong emission, disabled mipmaps,
+  camera HDR off while Bloom is on, missing light/reflection probes,
+  and disabled light color temperature. Reimport-heavy fixes confirm first.
+
 ## [0.4.0] - 2026-06-11
 
 ### Added

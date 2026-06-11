@@ -133,5 +133,19 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         public bool postDepthOfFieldEnabled = false;
         public bool postMotionBlurEnabled = false;
         public bool postAOEnabled = false;
+
+        // ---- Ground Shadow (Module D) ----
+        public GameObject groundShadowPlane;
+        public Material groundShadowMaterial;
+        [Range(0f, 1f)] public float groundShadowOpacity = 0.6f;
+        public float groundShadowSizeMultiplier = 2.0f;
+
+        // ---- Fog (Module D) ----
+        public bool fogEnabled = false;
+        public FogMode fogMode = FogMode.ExponentialSquared;
+        public Color fogColor = new Color(0.6f, 0.65f, 0.7f, 1f);
+        public float fogDensity = 0.02f;
+        public float fogStartDistance = 10f;
+        public float fogEndDistance = 60f;
     }
 }

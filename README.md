@@ -32,7 +32,9 @@ https://github.com/darataBOSS/boss-look-preset.git#v0.1.0
 
 - **モジュール A: 環境光 / ベイク** — HDRI スカイボックス → ライトプローブ / リフレクション → ベイク → AR 化
 - **モジュール B: ライトリグ** — Spot / Area の 3 点ライト (Key / Fill / Back)
-- **モジュール C: ポストプロセス** — Post Processing Stack v2 (Profile / Volume / Layer 一式)
+- **モジュール C: ポストプロセス** — Built-in: PPv2 / URP: Volume (自動判定)
+- **モジュール D: 仕上げ** — ARグラウンドシャドウ (シャドウキャッチャー) + 距離フォグ
+- **モジュール E: ルック診断** — Gamma色空間・純白アルベド・UV2欠落などを一括検出し、選択 / 自動修正
 
 ## 状態 (フェーズ)
 

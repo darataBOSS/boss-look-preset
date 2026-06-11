@@ -9,7 +9,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
 {
     public class BOSSLookWizard : EditorWindow
     {
-        private enum Module { A_Environment, B_LightRig, C_PostProcess }
+        private enum Module { A_Environment, B_LightRig, C_PostProcess, D_Finishing, E_Lint }
         private enum EnvStep
         {
             S0_NameFolder = 0,
@@ -259,6 +259,12 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                 case Module.C_PostProcess:
                     DrawModuleC();
                     break;
+                case Module.D_Finishing:
+                    DrawModuleD();
+                    break;
+                case Module.E_Lint:
+                    DrawModuleE();
+                    break;
             }
             EditorGUILayout.EndScrollView();
         }
@@ -311,9 +317,11 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         {
             using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
             {
-                DrawTab("A: 環境光 / ベイク", Module.A_Environment);
-                DrawTab("B: ライトリグ", Module.B_LightRig);
-                DrawTab("C: ポストプロセス", Module.C_PostProcess);
+                DrawTab("A: 環境光", Module.A_Environment);
+                DrawTab("B: ライト", Module.B_LightRig);
+                DrawTab("C: ポスト", Module.C_PostProcess);
+                DrawTab("D: 仕上げ", Module.D_Finishing);
+                DrawTab("E: 診断", Module.E_Lint);
             }
         }
 
@@ -930,6 +938,146 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                     "URP Volume", preset.urpVolume, typeof(UnityEngine.Rendering.Volume), true);
             }
 #endif
+        }
+
+        // ---------------- Module D: Finishing (ground shadow + fog) ----------------
+
+        private void DrawModuleD()
+        {
+            if (!RequirePreset()) return;
+
+            EditorGUILayout.LabelField("ARグラウンドシャドウ (シャドウキャッチャー)", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(
+                "影だけを受ける透明な床を被写体の足元に生成します。AR表示で「浮いて見える」のを防ぎます。\n" +
+                (RenderPipelineDetector.IsURP
+                    ? "URP: メインライト + 追加ライト (スポットリグ) のリアルタイム影を受けます。"
+                    : "Built-in: Directional ライトのリアルタイム影のみ受けます。スポットリグの影を床に落としたい場合は、影あり の弱い Directional を1本足してください。") +
+                "\nシェーダとマテリアルはプリセットフォルダに生成され、シーンと一緒にアップロードされます。",
+                MessageType.Info);
+
+            EditorGUI.BeginChangeCheck();
+            preset.groundShadowOpacity = EditorGUILayout.Slider("影の濃さ", preset.groundShadowOpacity, 0f, 1f);
+            if (EditorGUI.EndChangeCheck())
+            {
+                GroundShadowOps.ApplyOpacity(preset);
+            }
+            preset.groundShadowSizeMultiplier = EditorGUILayout.Slider(
+                "サイズ倍率 (被写体の足元比)", preset.groundShadowSizeMultiplier, 1f, 6f);
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (ColoredButton("グラウンドシャドウを生成 / 更新", ColorGenerate, GUILayout.Height(26f)))
+                {
+                    if (preset.subject == null && Selection.activeTransform != null)
+                    {
+                        preset.subject = Selection.activeTransform;
+                        Debug.Log($"[BOSS Look] Subject 未指定のため選択中の \"{preset.subject.name}\" を被写体にしました。");
+                    }
+                    GroundShadowOps.CreateOrUpdate(preset);
+                }
+                if (ColoredButton("除去", ColorDanger, GUILayout.Width(64f), GUILayout.Height(26f)))
+                {
+                    GroundShadowOps.Remove(preset);
+                }
+            }
+            preset.groundShadowPlane = (GameObject)EditorGUILayout.ObjectField(
+                "Shadow Plane", preset.groundShadowPlane, typeof(GameObject), true);
+
+            EditorGUILayout.Space(12);
+
+            EditorGUILayout.LabelField("フォグ / 空気感", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(
+                "距離フォグで奥行きを出します。負荷はほぼゼロで、変更は即シーンに反映されます。",
+                MessageType.Info);
+
+            EditorGUI.BeginChangeCheck();
+            preset.fogEnabled = EditorGUILayout.Toggle("フォグ有効", preset.fogEnabled);
+            using (new EditorGUI.DisabledScope(!preset.fogEnabled))
+            {
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    preset.fogColor = EditorGUILayout.ColorField("フォグ色", preset.fogColor);
+                    if (GUILayout.Button("環境光から自動設定", GUILayout.Width(132f)))
+                    {
+                        preset.fogColor = FogOps.SuggestColorFromEnvironment();
+                        FogOps.Apply(preset);
+                        EditorUtility.SetDirty(preset);
+                    }
+                }
+                preset.fogMode = (FogMode)EditorGUILayout.EnumPopup("モード", preset.fogMode);
+                if (preset.fogMode == FogMode.Linear)
+                {
+                    preset.fogStartDistance = EditorGUILayout.FloatField("開始距離 (m)", preset.fogStartDistance);
+                    preset.fogEndDistance = EditorGUILayout.FloatField("終了距離 (m)", preset.fogEndDistance);
+                }
+                else
+                {
+                    preset.fogDensity = EditorGUILayout.Slider("濃度", preset.fogDensity, 0f, 0.15f);
+                }
+            }
+            if (EditorGUI.EndChangeCheck())
+            {
+                FogOps.Apply(preset);
+                EditorUtility.SetDirty(preset);
+            }
+
+            EditorGUILayout.HelpBox(
+                "AR納品ではカメラ映像にフォグが乗ると不自然になる場合があります。実機確認のうえ、不要なら「フォグ有効」を OFF に。",
+                MessageType.None);
+        }
+
+        // ---------------- Module E: Look Lint ----------------
+
+        private List<LintIssue> lintResults;
+        private bool lintRan;
+
+        private void DrawModuleE()
+        {
+            if (!RequirePreset()) return;
+
+            EditorGUILayout.LabelField("ルック診断", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(
+                "ルックを壊しがちな設定を一括チェックします: Gamma色空間 / 純白アルベド / UV2欠落 / 強すぎEmission / ミップマップ無効 / HDR無効 / プローブ未生成 / 色温度無効。",
+                MessageType.Info);
+
+            if (ColoredButton("🔍 診断を実行", ColorAuto, GUILayout.Height(28f)))
+            {
+                lintResults = LintOps.RunAll(preset);
+                lintRan = true;
+            }
+
+            if (!lintRan || lintResults == null) return;
+
+            EditorGUILayout.Space(4);
+            if (lintResults.Count == 0)
+            {
+                EditorGUILayout.HelpBox("問題は見つかりませんでした ✨", MessageType.Info);
+                return;
+            }
+
+            EditorGUILayout.LabelField($"検出: {lintResults.Count} 件", EditorStyles.boldLabel);
+            foreach (var issue in lintResults)
+            {
+                var type = issue.severity == LintSeverity.Error ? MessageType.Error
+                    : issue.severity == LintSeverity.Warning ? MessageType.Warning
+                    : MessageType.Info;
+                EditorGUILayout.HelpBox(issue.message, type);
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (issue.targets != null && issue.targets.Count > 0 &&
+                        GUILayout.Button($"対象を選択 ({issue.targets.Count})", GUILayout.Width(140f)))
+                    {
+                        Selection.objects = issue.targets.ToArray();
+                    }
+                    if (issue.fix != null && ColoredButton(issue.fixLabel, ColorGenerate))
+                    {
+                        issue.fix();
+                        lintResults = LintOps.RunAll(preset);
+                        GUIUtility.ExitGUI(); // the list we're iterating just changed
+                    }
+                }
+                EditorGUILayout.Space(2);
+            }
         }
 
         // ---------------- Helpers ----------------

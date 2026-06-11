@@ -80,6 +80,12 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
                 }
             }
 
+            // Ground shadow plane
+            if (preset.groundShadowPlane == null)
+            {
+                preset.groundShadowPlane = GameObject.Find($"{preset.baseName}_GroundShadow");
+            }
+
             // Post processing (Built-in / PPv2)
 #if BOSS_LOOK_PRESET_HAS_PPV2
             if (preset.postVolume == null)
