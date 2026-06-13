@@ -111,6 +111,19 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 #endif
         }
 
+        /// <summary>Re-applies effect values to the existing profile only
+        /// (no volume/layer/camera work), for cheap live slider updates.</summary>
+        public static void ReapplyProfile(BOSSLookPreset preset)
+        {
+#if BOSS_LOOK_PRESET_HAS_PPV2
+            if (preset != null && preset.postProfile is PostProcessProfile profile)
+            {
+                ApplyEffectToggles(profile, preset);
+                EditorUtility.SetDirty(profile);
+            }
+#endif
+        }
+
 #if BOSS_LOOK_PRESET_HAS_PPV2
         private static PostProcessResources LoadDefaultPostResources()
         {
@@ -129,7 +142,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             EnsureEffect<Bloom>(profile, preset.postBloomEnabled, e =>
             {
                 e.intensity.overrideState = true;
-                e.intensity.value = BOSSLookDefaults.PostBloomIntensity;
+                e.intensity.value = preset.bloomIntensity;
                 e.threshold.overrideState = true;
                 e.threshold.value = 1.1f;
             });
@@ -138,21 +151,38 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             {
                 e.tonemapper.overrideState = true;
                 e.tonemapper.value = Tonemapper.ACES;
+                e.postExposure.overrideState = true;
+                e.postExposure.value = preset.gradePostExposure;
+                e.contrast.overrideState = true;
+                e.contrast.value = preset.gradeContrast;
+                e.saturation.overrideState = true;
+                e.saturation.value = preset.gradeSaturation;
+                e.colorFilter.overrideState = true;
+                e.colorFilter.value = preset.gradeColorFilter;
                 e.temperature.overrideState = true;
-                e.temperature.value = 0f;
+                e.temperature.value = preset.gradeTemperature;
+                e.tint.overrideState = true;
+                e.tint.value = preset.gradeTint;
             });
 
             EnsureEffect<Vignette>(profile, preset.postVignetteEnabled, e =>
             {
                 e.intensity.overrideState = true;
-                e.intensity.value = BOSSLookDefaults.PostVignetteIntensity;
+                e.intensity.value = preset.vignetteIntensity;
                 e.smoothness.overrideState = true;
                 e.smoothness.value = 0.5f;
             });
 
             EnsureEffect<DepthOfField>(profile, preset.postDepthOfFieldEnabled, null);
             EnsureEffect<MotionBlur>(profile, preset.postMotionBlurEnabled, null);
-            EnsureEffect<AmbientOcclusion>(profile, preset.postAOEnabled, null);
+            EnsureEffect<AmbientOcclusion>(profile, preset.postAOEnabled, e =>
+            {
+                // Light, grounding AO — not a heavy crease-darkening pass.
+                e.intensity.overrideState = true;
+                e.intensity.value = 0.5f;
+                e.radius.overrideState = true;
+                e.radius.value = 0.25f;
+            });
         }
 
         private static void EnsureEffect<T>(PostProcessProfile profile, bool enabled, System.Action<T> configure)

@@ -51,6 +51,16 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         Tag = 2,
     }
 
+    public enum AntiAliasingMode
+    {
+        None = 0,
+        FXAA = 1,    // cheap post AA
+        SMAA = 2,    // higher-quality post AA
+        MSAA2x = 3,  // hardware MSAA
+        MSAA4x = 4,
+        MSAA8x = 5,
+    }
+
     [Serializable]
     public class StashedLightInfo
     {
@@ -72,6 +82,8 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         public Material skyboxMaterial;
         public Texture hdriTexture;
         [Range(0f, 8f)] public float environmentIntensity = 1.0f;
+        [Range(0f, 360f)] public float skyboxRotation = 0f;
+        [Range(0f, 8f)] public float skyboxExposure = 1.0f;
         public Material stashedSkybox;
 
         // ---- Lighting Settings ----
@@ -103,6 +115,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         public List<ReflectionProbe> reflectionProbes = new List<ReflectionProbe>();
         public ReflectionBakeMode reflectionMode = ReflectionBakeMode.A_UseHDRI;
         public float reflectionBoxPadding = 0.5f;
+        public int reflectionResolution = 128;
 
         // ---- Light Rig ----
         public RigType rigType = RigType.ThreePoint;
@@ -163,11 +176,28 @@ namespace DarataBOSS.BOSSLookPreset.Editor
 
         // Shared effect toggles (semantic, not API-specific)
         public bool postBloomEnabled = true;
+        [Range(0f, 2f)] public float bloomIntensity = 0.4f;
         public bool postColorGradingEnabled = true;
         public bool postVignetteEnabled = true;
+        [Range(0f, 1f)] public float vignetteIntensity = 0.25f;
         public bool postDepthOfFieldEnabled = false;
         public bool postMotionBlurEnabled = false;
-        public bool postAOEnabled = false;
+        public bool postAOEnabled = true;
+
+        // Color grading controls (mapped to PPv2 ColorGrading / URP ColorAdjustments+WhiteBalance)
+        [Range(-3f, 3f)] public float gradePostExposure = 0f;
+        [Range(-100f, 100f)] public float gradeContrast = 0f;
+        [Range(-100f, 100f)] public float gradeSaturation = 0f;
+        public Color gradeColorFilter = Color.white;
+        [Range(-100f, 100f)] public float gradeTemperature = 0f;
+        [Range(-100f, 100f)] public float gradeTint = 0f;
+
+        // ---- Quality: Anti-aliasing & Shadows (Module F) ----
+        public AntiAliasingMode antiAliasing = AntiAliasingMode.SMAA;
+        public float shadowDistance = 30f;
+        public UnityEngine.ShadowResolution shadowResolution = UnityEngine.ShadowResolution.High;
+        public int shadowCascades = 2;
+        public bool softShadows = true;
 
         // ---- Ground Shadow (Module D) ----
         public GameObject groundShadowPlane;

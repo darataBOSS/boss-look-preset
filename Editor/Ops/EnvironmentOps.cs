@@ -123,6 +123,8 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
                 mat.SetTexture("_MainTex", preset.hdriTexture);
             }
 
+            ApplySkyboxParams(mat, preset);
+
             EditorUtility.SetDirty(mat);
             AssetDatabase.SaveAssets();
 
@@ -134,6 +136,25 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             RenderSettings.reflectionIntensity = preset.environmentIntensity;
             DynamicGI.UpdateEnvironment();
             EditorUtility.SetDirty(preset);
+        }
+
+        private static void ApplySkyboxParams(Material mat, BOSSLookPreset preset)
+        {
+            if (mat == null) return;
+            if (mat.HasProperty("_Rotation")) mat.SetFloat("_Rotation", preset.skyboxRotation);
+            if (mat.HasProperty("_Exposure")) mat.SetFloat("_Exposure", preset.skyboxExposure);
+        }
+
+        /// <summary>Live-applies rotation / exposure / intensity to the existing
+        /// skybox without regenerating the material, for slider dragging.</summary>
+        public static void ApplyEnvironmentLive(BOSSLookPreset preset)
+        {
+            if (preset == null || preset.skyboxMaterial == null) return;
+            ApplySkyboxParams(preset.skyboxMaterial, preset);
+            RenderSettings.ambientIntensity = preset.environmentIntensity;
+            RenderSettings.reflectionIntensity = preset.environmentIntensity;
+            EditorUtility.SetDirty(preset.skyboxMaterial);
+            DynamicGI.UpdateEnvironment();
         }
 
         // ---------------- Lighting Settings ----------------
@@ -319,6 +340,8 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 
             probe.mode = ReflectionProbeMode.Baked;
             probe.boxProjection = true;
+            probe.resolution = Mathf.Clamp(Mathf.ClosestPowerOfTwo(preset.reflectionResolution), 16, 2048);
+            probe.hdr = true;
             probe.center = preset.probeArea.center - probe.transform.position;
             probe.size = preset.probeArea.size + Vector3.one * preset.reflectionBoxPadding * 2f;
 

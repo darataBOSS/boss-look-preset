@@ -106,13 +106,26 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 #endif
         }
 
+        /// <summary>Re-applies effect values to the existing profile only
+        /// (no volume/camera work), for cheap live slider updates.</summary>
+        public static void ReapplyProfile(BOSSLookPreset preset)
+        {
+#if BOSS_LOOK_PRESET_HAS_URP
+            if (preset != null && preset.urpVolumeProfile is VolumeProfile profile)
+            {
+                ApplyEffectToggles(profile, preset);
+                EditorUtility.SetDirty(profile);
+            }
+#endif
+        }
+
 #if BOSS_LOOK_PRESET_HAS_URP
         private static void ApplyEffectToggles(VolumeProfile profile, BOSSLookPreset preset)
         {
             EnsureComponent<Bloom>(profile, preset.postBloomEnabled, b =>
             {
                 b.intensity.overrideState = true;
-                b.intensity.value = BOSSLookDefaults.PostBloomIntensity;
+                b.intensity.value = preset.bloomIntensity;
                 b.threshold.overrideState = true;
                 b.threshold.value = 1.1f;
             });
@@ -125,21 +138,27 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             });
             EnsureComponent<ColorAdjustments>(profile, preset.postColorGradingEnabled, c =>
             {
-                c.postExposure.overrideState = false;
-                c.contrast.overrideState = false;
-                c.saturation.overrideState = false;
+                c.postExposure.overrideState = true;
+                c.postExposure.value = preset.gradePostExposure;
+                c.contrast.overrideState = true;
+                c.contrast.value = preset.gradeContrast;
+                c.saturation.overrideState = true;
+                c.saturation.value = preset.gradeSaturation;
+                c.colorFilter.overrideState = true;
+                c.colorFilter.value = preset.gradeColorFilter;
             });
             EnsureComponent<WhiteBalance>(profile, preset.postColorGradingEnabled, w =>
             {
                 w.temperature.overrideState = true;
-                w.temperature.value = 0f;
-                w.tint.overrideState = false;
+                w.temperature.value = preset.gradeTemperature;
+                w.tint.overrideState = true;
+                w.tint.value = preset.gradeTint;
             });
 
             EnsureComponent<Vignette>(profile, preset.postVignetteEnabled, v =>
             {
                 v.intensity.overrideState = true;
-                v.intensity.value = BOSSLookDefaults.PostVignetteIntensity;
+                v.intensity.value = preset.vignetteIntensity;
                 v.smoothness.overrideState = true;
                 v.smoothness.value = 0.5f;
             });

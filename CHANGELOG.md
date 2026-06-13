@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2026-06-13
+
+「整える三本柱」+ 環境系の品質レバーを追加し、ウィザードUIを刷新。
+
+### Added — 品質タブ (Module F)
+- **アンチエイリアス**: None / FXAA / SMAA / MSAA 2x・4x・8x を選択。Built-in は
+  `QualitySettings.antiAliasing` (MSAA) と PostProcessLayer (FXAA/SMAA)、URP は
+  URP Asset の `msaaSampleCount` と Camera の AA モードへ自動振り分け。
+- **影の品質**: 影距離 (被写体スケールから自動算出ボタン付き) / カスケード /
+  解像度 / ソフトシャドウ。Built-in は QualitySettings、URP は URP Asset へ。
+
+### Added — カラーグレード (Module C 拡張)
+- これまで実質ノーオーバーライドだったグレーディング面を展開。露出 (EV) /
+  コントラスト / 彩度 / カラーフィルター / 色温度 / ティントをスライダ化し、
+  PPv2 ColorGrading と URP ColorAdjustments+WhiteBalance の両方へライブ反映。
+  Bloom / Vignette も強度スライダを追加。
+- ポストの AO を軽め設定で既定 ON に変更。
+
+### Added — 環境 (Module A 拡張)
+- **スカイボックスの回転 / 露出** スライダ (ライブ反映)。HDRI の太陽の向きを回せます。
+- **HDRI 太陽整列**: 太陽リグ選択時、equirectangular HDRI の最輝点を太陽とみなして
+  太陽の高度 / 方位を自動推定するボタン (`🧭`)。
+- **リフレクションプローブ解像度** の選択 (64〜1024) と HDR 既定 ON。
+
+### Changed — UI 刷新
+- 共通 UI ヘルパー `BOSSLookUI` を追加し、アクセントバー付きカード・役割色ボタン・
+  補足ヒント表示を全タブで統一。タブは「環境光 / ライト / ポスト / 仕上げ / 品質 / 診断」。
+
 ## [0.6.0] - 2026-06-11
 
 ### Added

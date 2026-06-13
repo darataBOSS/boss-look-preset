@@ -9,7 +9,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
 {
     public class BOSSLookWizard : EditorWindow
     {
-        private enum Module { A_Environment, B_LightRig, C_PostProcess, D_Finishing, E_Lint }
+        private enum Module { A_Environment, B_LightRig, C_PostProcess, D_Finishing, F_Quality, E_Lint }
         private enum EnvStep
         {
             S0_NameFolder = 0,
@@ -262,6 +262,9 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                 case Module.D_Finishing:
                     DrawModuleD();
                     break;
+                case Module.F_Quality:
+                    DrawModuleF();
+                    break;
                 case Module.E_Lint:
                     DrawModuleE();
                     break;
@@ -317,11 +320,12 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         {
             using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
             {
-                DrawTab("A: 環境光", Module.A_Environment);
-                DrawTab("B: ライト", Module.B_LightRig);
-                DrawTab("C: ポスト", Module.C_PostProcess);
-                DrawTab("D: 仕上げ", Module.D_Finishing);
-                DrawTab("E: 診断", Module.E_Lint);
+                DrawTab("環境光", Module.A_Environment);
+                DrawTab("ライト", Module.B_LightRig);
+                DrawTab("ポスト", Module.C_PostProcess);
+                DrawTab("仕上げ", Module.D_Finishing);
+                DrawTab("品質", Module.F_Quality);
+                DrawTab("診断", Module.E_Lint);
             }
         }
 
@@ -451,15 +455,18 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             EditorGUI.BeginChangeCheck();
             preset.environmentIntensity = EditorGUILayout.Slider(
                 "Environment Intensity", preset.environmentIntensity, 0f, 8f);
+            preset.skyboxExposure = EditorGUILayout.Slider(
+                "Skybox Exposure", preset.skyboxExposure, 0f, 8f);
+            preset.skyboxRotation = EditorGUILayout.Slider(
+                "Skybox Rotation (°)", preset.skyboxRotation, 0f, 360f);
             if (EditorGUI.EndChangeCheck() && preset.skyboxMaterial != null)
             {
-                // Live preview: the slider drives the scene directly once a
-                // skybox exists, no regenerate button needed.
-                RenderSettings.ambientIntensity = preset.environmentIntensity;
-                RenderSettings.reflectionIntensity = preset.environmentIntensity;
-                DynamicGI.UpdateEnvironment();
+                // Live preview: sliders drive the scene directly once a skybox
+                // exists, no regenerate button needed.
+                EnvironmentOps.ApplyEnvironmentLive(preset);
                 EditorUtility.SetDirty(preset);
             }
+            BOSSLookUI.Hint("Rotation で HDRI の太陽の向きを回せます。ライトタブの「太陽」リグと向きを合わせると影が自然になります。");
 
             EditorGUILayout.HelpBox(
                 "Texture2D ならパノラマ (Skybox/Panoramic)、Cubemap なら Skybox/Cubemap として自動でスカイボックスマテリアルを作ります。",
@@ -636,6 +643,11 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                 MessageType.Info);
 
             preset.reflectionBoxPadding = EditorGUILayout.FloatField("Box Padding", preset.reflectionBoxPadding);
+            preset.reflectionResolution = EditorGUILayout.IntPopup("解像度",
+                Mathf.ClosestPowerOfTwo(preset.reflectionResolution),
+                new[] { "64", "128", "256", "512", "1024" },
+                new[] { 64, 128, 256, 512, 1024 });
+            BOSSLookUI.Hint("光沢のあるマテリアルの映り込みを綺麗にするなら 256〜512。WebARでは 128〜256 が無難です。");
 
             if (ColoredButton("Reflection Probe を生成 / 更新 (Baked)", ColorGenerate))
             {
@@ -933,6 +945,21 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                     ApplySunPreset(elevation: 50f, intensity: 0.6f, kelvin: 6800f, fillRatio: 2f);
                 }
             }
+
+            EditorGUILayout.Space(2);
+            using (new EditorGUI.DisabledScope(!HdriSunOps.CanAlign(preset)))
+            {
+                if (BOSSLookUI.Button("🧭 HDRIの太陽に向きを合わせる", BOSSLookUI.Auto))
+                {
+                    if (HdriSunOps.AlignSunToHdri(preset, out string msg))
+                    {
+                        if (LightRigOps.RigExists(preset)) LightRigOps.CreateOrUpdateRig(preset);
+                        ShowNotification(new GUIContent("太陽の向きを合わせました"));
+                    }
+                    Debug.Log($"[BOSS Look] {msg}");
+                }
+            }
+            BOSSLookUI.Hint("HDRI (equirectangular の Texture2D) の最も明るい方向を太陽とみなして向きを推定します。");
         }
 
         private void ApplySunPreset(float elevation, float intensity, float kelvin, float fillRatio)
@@ -1002,12 +1029,55 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                     MessageType.Warning);
             }
 
-            preset.postBloomEnabled = EditorGUILayout.Toggle("Bloom", preset.postBloomEnabled);
-            preset.postColorGradingEnabled = EditorGUILayout.Toggle("Color Grading (Tonemapping)", preset.postColorGradingEnabled);
-            preset.postVignetteEnabled = EditorGUILayout.Toggle("Vignette", preset.postVignetteEnabled);
-            preset.postDepthOfFieldEnabled = EditorGUILayout.Toggle("Depth of Field", preset.postDepthOfFieldEnabled);
-            preset.postMotionBlurEnabled = EditorGUILayout.Toggle("Motion Blur", preset.postMotionBlurEnabled);
-            preset.postAOEnabled = EditorGUILayout.Toggle("Ambient Occlusion", preset.postAOEnabled);
+            // --- Effects card ---
+            EditorGUI.BeginChangeCheck();
+            using (BOSSLookUI.Card("エフェクト", BOSSLookUI.Accent))
+            {
+                preset.postBloomEnabled = EditorGUILayout.Toggle("Bloom", preset.postBloomEnabled);
+                using (new EditorGUI.DisabledScope(!preset.postBloomEnabled))
+                {
+                    preset.bloomIntensity = EditorGUILayout.Slider("　強度", preset.bloomIntensity, 0f, 2f);
+                }
+                preset.postColorGradingEnabled = EditorGUILayout.Toggle("Color Grading / Tonemapping", preset.postColorGradingEnabled);
+                preset.postVignetteEnabled = EditorGUILayout.Toggle("Vignette", preset.postVignetteEnabled);
+                using (new EditorGUI.DisabledScope(!preset.postVignetteEnabled))
+                {
+                    preset.vignetteIntensity = EditorGUILayout.Slider("　強度", preset.vignetteIntensity, 0f, 1f);
+                }
+                preset.postAOEnabled = EditorGUILayout.Toggle("Ambient Occlusion", preset.postAOEnabled);
+                preset.postDepthOfFieldEnabled = EditorGUILayout.Toggle("Depth of Field", preset.postDepthOfFieldEnabled);
+                preset.postMotionBlurEnabled = EditorGUILayout.Toggle("Motion Blur", preset.postMotionBlurEnabled);
+            }
+
+            // --- Color grade card ---
+            using (BOSSLookUI.Card("カラーグレード (見た目の最終調整)", BOSSLookUI.Finalize))
+            {
+                using (new EditorGUI.DisabledScope(!preset.postColorGradingEnabled))
+                {
+                    preset.gradePostExposure = EditorGUILayout.Slider("露出 (EV)", preset.gradePostExposure, -3f, 3f);
+                    preset.gradeContrast = EditorGUILayout.Slider("コントラスト", preset.gradeContrast, -100f, 100f);
+                    preset.gradeSaturation = EditorGUILayout.Slider("彩度", preset.gradeSaturation, -100f, 100f);
+                    preset.gradeColorFilter = EditorGUILayout.ColorField("カラーフィルター", preset.gradeColorFilter);
+                    preset.gradeTemperature = EditorGUILayout.Slider("色温度 (寒⇔暖)", preset.gradeTemperature, -100f, 100f);
+                    preset.gradeTint = EditorGUILayout.Slider("ティント (緑⇔マゼンタ)", preset.gradeTint, -100f, 100f);
+                    if (GUILayout.Button("グレードをリセット"))
+                    {
+                        preset.gradePostExposure = 0f; preset.gradeContrast = 0f; preset.gradeSaturation = 0f;
+                        preset.gradeColorFilter = Color.white; preset.gradeTemperature = 0f; preset.gradeTint = 0f;
+                        GUI.changed = true;
+                    }
+                }
+                if (!preset.postColorGradingEnabled)
+                {
+                    BOSSLookUI.Hint("Color Grading を ON にするとスライダが有効になります。");
+                }
+            }
+            // Live grade: drag updates the existing profile without full re-setup.
+            if (EditorGUI.EndChangeCheck())
+            {
+                EditorUtility.SetDirty(preset);
+                if (PostProcessOps.HasProfile(preset)) PostProcessOps.ReapplyProfile(preset);
+            }
 
             if (rp == RenderPipelineDetector.ActiveRP.URP && preset.postAOEnabled)
             {
@@ -1193,6 +1263,80 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                 }
                 EditorGUILayout.Space(2);
             }
+        }
+
+        // ---------------- Module F: Quality (AA + shadows) ----------------
+
+        private void DrawModuleF()
+        {
+            if (!RequirePreset()) return;
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField("Render Pipeline", GUILayout.Width(110));
+                EditorGUILayout.LabelField(RenderPipelineDetector.DisplayName, EditorStyles.miniBoldLabel);
+            }
+
+            // --- Anti-aliasing ---
+            using (BOSSLookUI.Card("アンチエイリアス (輪郭の滑らかさ)", BOSSLookUI.Accent))
+            {
+                EditorGUI.BeginChangeCheck();
+                preset.antiAliasing = (AntiAliasingMode)EditorGUILayout.EnumPopup("モード", preset.antiAliasing);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    EditorUtility.SetDirty(preset);
+                    QualityOps.ApplyAntiAliasing(preset);
+                }
+                BOSSLookUI.Hint(QualityOps.AntiAliasingExplanation(preset));
+                if ((preset.antiAliasing == AntiAliasingMode.FXAA || preset.antiAliasing == AntiAliasingMode.SMAA)
+                    && !RenderPipelineDetector.IsURP && preset.postLayer == null)
+                {
+                    EditorGUILayout.HelpBox("FXAA/SMAA には Post Process Layer が必要です。先に「ポスト」タブでセットアップしてください。",
+                        MessageType.Warning);
+                }
+                if (BOSSLookUI.Button("アンチエイリアスを適用", BOSSLookUI.Generate))
+                {
+                    QualityOps.ApplyAntiAliasing(preset);
+                    ShowNotification(new GUIContent("AA を適用しました"));
+                }
+            }
+
+            // --- Shadows ---
+            using (BOSSLookUI.Card("影の品質 (接地感)", BOSSLookUI.Bake))
+            {
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    preset.shadowDistance = EditorGUILayout.FloatField("影の距離 (m)", preset.shadowDistance);
+                    if (GUILayout.Button("自動", GUILayout.Width(48f)))
+                    {
+                        preset.shadowDistance = QualityOps.SuggestShadowDistance(preset);
+                    }
+                }
+                BOSSLookUI.Hint("距離を被写体スケールに合わせて詰めると、足元の影がくっきりして接地感が上がります。");
+                preset.shadowCascades = EditorGUILayout.IntPopup("カスケード",
+                    preset.shadowCascades, new[] { "1", "2", "4" }, new[] { 1, 2, 4 });
+
+                if (!RenderPipelineDetector.IsURP)
+                {
+                    preset.shadowResolution = (UnityEngine.ShadowResolution)EditorGUILayout.EnumPopup(
+                        "影の解像度", preset.shadowResolution);
+                    preset.softShadows = EditorGUILayout.Toggle("ソフトシャドウ", preset.softShadows);
+                }
+                else
+                {
+                    BOSSLookUI.Hint("URP では影の解像度 / ソフトシャドウは URP Asset と各ライト側の設定です (距離とカスケードのみここで設定)。");
+                }
+
+                if (BOSSLookUI.Button("影の品質を適用", BOSSLookUI.Generate))
+                {
+                    QualityOps.ApplyShadows(preset);
+                    ShowNotification(new GUIContent("影設定を適用しました"));
+                }
+            }
+
+            EditorGUILayout.HelpBox(
+                "AA・影の設定は QualitySettings / URP Asset などプロジェクト全体に効きます (プリセットには保存され、適用ボタンで反映)。",
+                MessageType.None);
         }
 
         // ---------------- Helpers ----------------

@@ -63,6 +63,24 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             }
         }
 
+        /// <summary>True once the active backend has a profile to grade.</summary>
+        public static bool HasProfile(BOSSLookPreset preset)
+        {
+            if (preset == null) return false;
+            return RenderPipelineDetector.IsURP
+                ? preset.urpVolumeProfile != null
+                : preset.postProfile != null;
+        }
+
+        /// <summary>Cheap live update of grading/effect values on the existing
+        /// profile, for slider dragging.</summary>
+        public static void ReapplyProfile(BOSSLookPreset preset)
+        {
+            if (preset == null) return;
+            if (RenderPipelineDetector.IsURP) PostProcessOpsURP.ReapplyProfile(preset);
+            else PostProcessOpsBuiltin.ReapplyProfile(preset);
+        }
+
         /// <summary>Removes from whichever backend has artefacts. Safe to call
         /// even after switching render pipelines mid-project — both branches
         /// are cleaned.</summary>
