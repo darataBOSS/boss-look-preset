@@ -9,7 +9,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
 {
     public class BOSSLookWizard : EditorWindow
     {
-        private enum Module { A_Environment, B_LightRig, C_PostProcess, D_Finishing, F_Quality, E_Lint }
+        private enum Module { G_Look, A_Environment, B_LightRig, C_PostProcess, D_Finishing, F_Quality, E_Lint }
         private enum EnvStep
         {
             S0_NameFolder = 0,
@@ -31,6 +31,11 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         private List<GameObject> lastMissingUv2 = new List<GameObject>();
         private bool bakeWasRunning;
         private readonly BoxBoundsHandle probeAreaHandle = new BoxBoundsHandle();
+
+        // Look tab state
+        private float lookStrength = 1f;
+        private string newLookName = "MyLook";
+        private List<BOSSLookStyleAsset> customLooks;
 
         private static string LastPresetPrefKey =>
             "BOSSLook.LastPresetGUID." + Application.dataPath.GetHashCode();
@@ -149,6 +154,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             SceneRelinkOps.RelinkAll(preset);
             newBaseName = preset.baseName;
             newFolderPath = SafeParent(preset.folderPath);
+            customLooks = null; // reload for the newly-adopted preset
 
             string path = AssetDatabase.GetAssetPath(preset);
             if (!string.IsNullOrEmpty(path))
@@ -250,6 +256,9 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             scroll = EditorGUILayout.BeginScrollView(scroll);
             switch (currentModule)
             {
+                case Module.G_Look:
+                    DrawModuleG();
+                    break;
                 case Module.A_Environment:
                     DrawModuleA();
                     break;
@@ -320,6 +329,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         {
             using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
             {
+                DrawTab("★ルック", Module.G_Look);
                 DrawTab("環境光", Module.A_Environment);
                 DrawTab("ライト", Module.B_LightRig);
                 DrawTab("ポスト", Module.C_PostProcess);
@@ -1337,6 +1347,97 @@ namespace DarataBOSS.BOSSLookPreset.Editor
             EditorGUILayout.HelpBox(
                 "AA・影の設定は QualitySettings / URP Asset などプロジェクト全体に効きます (プリセットには保存され、適用ボタンで反映)。",
                 MessageType.None);
+        }
+
+        // ---------------- Module G: Look styles ----------------
+
+        private void DrawModuleG()
+        {
+            if (!RequirePreset()) return;
+
+            EditorGUILayout.LabelField("ルックを選ぶ", EditorStyles.boldLabel);
+            EditorGUILayout.HelpBox(
+                "ワンクリックで「グレード + Bloom/Vignette + フォグ + ライト比」をまとめて設定します。" +
+                "ベイクや生成物は変更しません (見た目の数値だけを上書き)。各タブで後から微調整できます。",
+                MessageType.Info);
+
+            lookStrength = EditorGUILayout.Slider("適用の強さ", lookStrength, 0f, 1f);
+            BOSSLookUI.Hint("0 でニュートラル、1 でルックの効果が最大。適用ボタンを押すと反映されます。");
+
+            EditorGUILayout.Space(4);
+            EditorGUILayout.LabelField("組み込みルック", EditorStyles.miniBoldLabel);
+            foreach (var style in LookStyleLibrary.BuiltIn)
+            {
+                DrawLookCard(style, isCustom: false, asset: null);
+            }
+
+            EditorGUILayout.Space(8);
+            EditorGUILayout.LabelField("カスタムルック", EditorStyles.miniBoldLabel);
+
+            if (customLooks == null) customLooks = LookStyleOps.LoadCustom(preset);
+            if (customLooks.Count == 0)
+            {
+                BOSSLookUI.Hint("まだありません。現在の見た目を下のボタンで保存できます。");
+            }
+            else
+            {
+                foreach (var asset in customLooks)
+                {
+                    if (asset == null) continue;
+                    DrawLookCard(asset.style, isCustom: true, asset: asset);
+                }
+            }
+
+            EditorGUILayout.Space(6);
+            using (BOSSLookUI.Card("現在の見た目をカスタムルックとして保存", BOSSLookUI.Accent))
+            {
+                newLookName = EditorGUILayout.TextField("名前", newLookName);
+                if (BOSSLookUI.Button("💾 保存", BOSSLookUI.Generate))
+                {
+                    var captured = LookStyleOps.Capture(preset, newLookName);
+                    LookStyleOps.SaveCustom(preset, captured);
+                    customLooks = LookStyleOps.LoadCustom(preset);
+                    ShowNotification(new GUIContent("ルックを保存しました"));
+                }
+                BOSSLookUI.Hint("ポスト・フォグ・ライト比の現在値を Looks/ フォルダに .asset として保存します。");
+            }
+
+            if (GUILayout.Button("カスタムルックを再読み込み"))
+            {
+                customLooks = LookStyleOps.LoadCustom(preset);
+            }
+        }
+
+        private void DrawLookCard(LookStyle style, bool isCustom, BOSSLookStyleAsset asset)
+        {
+            using (BOSSLookUI.Card(style.name, isCustom ? BOSSLookUI.Auto : BOSSLookUI.Finalize))
+            {
+                if (!string.IsNullOrEmpty(style.description))
+                {
+                    BOSSLookUI.Hint(style.description);
+                }
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (BOSSLookUI.Button($"このルックを適用 (強さ {lookStrength:0.00})", BOSSLookUI.Generate))
+                    {
+                        LookStyleOps.Apply(preset, style, lookStrength);
+                        ShowNotification(new GUIContent($"「{style.name}」を適用"));
+                    }
+                    if (isCustom && asset != null)
+                    {
+                        if (BOSSLookUI.MiniButton("削除", BOSSLookUI.Danger, 56f))
+                        {
+                            if (EditorUtility.DisplayDialog("BOSS Look Preset",
+                                    $"カスタムルック「{style.name}」を削除します。よろしいですか?", "削除", "キャンセル"))
+                            {
+                                AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(asset));
+                                customLooks = LookStyleOps.LoadCustom(preset);
+                                GUIUtility.ExitGUI();
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // ---------------- Helpers ----------------
