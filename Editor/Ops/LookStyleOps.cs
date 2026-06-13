@@ -49,6 +49,17 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             if (PostProcessOps.HasProfile(preset)) PostProcessOps.ReapplyProfile(preset);
             FogOps.Apply(preset);
             if (LightRigOps.RigExists(preset)) LightRigOps.CreateOrUpdateRig(preset);
+
+            // STYLY mobile (Gamma): also bake the mood into lighting/environment
+            // so the look survives even if the post stack is dropped on device.
+            if (preset.outputTarget == OutputTarget.STYLYMobileGamma)
+            {
+                LookBakeOps.ApplyToLighting(preset, style, strength);
+            }
+            else
+            {
+                LookBakeOps.ResetLightingTint(preset);
+            }
         }
 
         /// <summary>Reads the preset's current visual fields back into a look,

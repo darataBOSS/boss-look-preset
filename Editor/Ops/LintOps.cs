@@ -35,7 +35,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
         {
             var issues = new List<LintIssue>();
 
-            CheckColorSpace(issues);
+            CheckColorSpace(preset, issues);
             CheckCameraHdr(preset, issues);
             CheckColorTemperature(preset, issues);
             CheckProbes(preset, issues);
@@ -51,13 +51,49 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 
         // ---------------- Project settings ----------------
 
-        private static void CheckColorSpace(List<LintIssue> issues)
+        private static void CheckColorSpace(BOSSLookPreset preset, List<LintIssue> issues)
         {
+            bool mobile = preset != null && preset.outputTarget == OutputTarget.STYLYMobileGamma;
+
+            if (mobile)
+            {
+                // STYLY mobile requires Gamma — flag Linear instead, and never
+                // push toward Linear.
+                if (PlayerSettings.colorSpace == ColorSpace.Linear)
+                {
+                    issues.Add(new LintIssue
+                    {
+                        severity = LintSeverity.Warning,
+                        message = "出力ターゲットが STYLY モバイルですが Color Space が Linear です。STYLY モバイルは Gamma 前提のため、Gamma を推奨します。",
+                        fixLabel = "Gamma に変更",
+                        fix = () =>
+                        {
+                            if (EditorUtility.DisplayDialog("BOSS Look Preset",
+                                    "Color Space を Gamma に変更します。テクスチャの再インポートが走り、" +
+                                    "既存マテリアルの見た目が変わる可能性があります。よろしいですか?",
+                                    "変更", "キャンセル"))
+                            {
+                                PlayerSettings.colorSpace = ColorSpace.Gamma;
+                            }
+                        },
+                    });
+                }
+                else
+                {
+                    issues.Add(new LintIssue
+                    {
+                        severity = LintSeverity.Info,
+                        message = "Gamma で動作中です (STYLY モバイル想定)。グレードは LDR モード + ライティング焼き込みで反映されます。ACES など Linear 専用効果は使われません。",
+                    });
+                }
+                return;
+            }
+
             if (PlayerSettings.colorSpace == ColorSpace.Linear) return;
             issues.Add(new LintIssue
             {
                 severity = LintSeverity.Error,
-                message = "Color Space が Gamma です。Tonemapping / Color Grading が実質使えず、ライティングの質も落ちます。",
+                message = "Color Space が Gamma です。Tonemapping / Color Grading が実質使えず、ライティングの質も落ちます。(STYLY モバイル納品なら、ルックタブで出力ターゲットを「STYLY モバイル」にしてください)",
                 fixLabel = "Linear に変更 (全テクスチャ再インポート発生)",
                 fix = () =>
                 {
@@ -75,6 +111,8 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
         private static void CheckCameraHdr(BOSSLookPreset preset, List<LintIssue> issues)
         {
             if (preset == null || !preset.postBloomEnabled) return;
+            // STYLY mobile is Gamma/LDR — bloom there doesn't rely on camera HDR.
+            if (preset.outputTarget == OutputTarget.STYLYMobileGamma) return;
             var cam = Camera.main;
             if (cam == null || cam.allowHDR) return;
             issues.Add(new LintIssue

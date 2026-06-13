@@ -61,6 +61,16 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         MSAA8x = 5,
     }
 
+    /// <summary>Delivery target. Drives how looks are realized: the general
+    /// path assumes Linear + ACES post; the STYLY mobile path assumes Gamma
+    /// (STYLY mobile can't use Linear) and bakes the look into lighting plus
+    /// LDR-mode post so it survives.</summary>
+    public enum OutputTarget
+    {
+        GeneralLinear = 0,    // 汎用 / PC: Linear, ACES tonemapping, full post
+        STYLYMobileGamma = 1, // STYLY モバイル: Gamma, lighting-baked + LDR post
+    }
+
     [Serializable]
     public class StashedLightInfo
     {
@@ -77,6 +87,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         public string baseName = "BOSSLook";
         public string folderPath = "Assets/BOSSLookPreset";
         public BOSSLookPhase phase = BOSSLookPhase.NotCreated;
+        public OutputTarget outputTarget = OutputTarget.GeneralLinear;
 
         // ---- Environment / Skybox ----
         public Material skyboxMaterial;

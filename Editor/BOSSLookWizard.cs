@@ -323,6 +323,20 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                 EditorGUILayout.LabelField("Render Pipeline", GUILayout.Width(110));
                 EditorGUILayout.LabelField(RenderPipelineDetector.DisplayName, EditorStyles.miniBoldLabel);
             }
+
+            if (preset != null)
+            {
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField("出力ターゲット", GUILayout.Width(110));
+                    var prev = GUI.color;
+                    if (preset.outputTarget == OutputTarget.STYLYMobileGamma) GUI.color = BOSSLookUI.Accent;
+                    EditorGUILayout.LabelField(
+                        preset.outputTarget == OutputTarget.STYLYMobileGamma ? "STYLY モバイル (Gamma)" : "汎用 / PC (Linear)",
+                        EditorStyles.miniBoldLabel);
+                    GUI.color = prev;
+                }
+            }
         }
 
         private void DrawModuleTabs()
@@ -1032,10 +1046,18 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                 return;
             }
 
-            if (!PostProcessOps.IsLinearColorSpace)
+            if (preset.outputTarget == OutputTarget.STYLYMobileGamma)
             {
                 EditorGUILayout.HelpBox(
-                    "Color Space が Linear ではありません。Tonemapping / Color Grading は実質使えなくなります。Player Settings → Other Settings で Linear に変更することを推奨します。",
+                    "出力ターゲット = STYLY モバイル。Color Grading は Gamma 対応の LDR モードで構成され、ACES は使いません " +
+                    "(Color Space は Gamma のままで OK)。ルックタブから適用すると環境光への焼き込みも併用されます。",
+                    MessageType.Info);
+            }
+            else if (!PostProcessOps.IsLinearColorSpace)
+            {
+                EditorGUILayout.HelpBox(
+                    "Color Space が Linear ではありません。Tonemapping / Color Grading は実質使えなくなります。" +
+                    "STYLY モバイル納品なら、ルックタブで出力ターゲットを「STYLY モバイル」に切り替えてください。",
                     MessageType.Warning);
             }
 
@@ -1355,10 +1377,39 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         {
             if (!RequirePreset()) return;
 
+            // --- Output target ---
+            using (BOSSLookUI.Card("出力ターゲット", BOSSLookUI.Accent))
+            {
+                EditorGUI.BeginChangeCheck();
+                preset.outputTarget = (OutputTarget)EditorGUILayout.EnumPopup("納品先", preset.outputTarget);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    EditorUtility.SetDirty(preset);
+                    // Re-bake the post profile so grading mode (HDR/LDR) flips.
+                    if (PostProcessOps.HasProfile(preset)) PostProcessOps.ReapplyProfile(preset);
+                }
+
+                if (preset.outputTarget == OutputTarget.STYLYMobileGamma)
+                {
+                    EditorGUILayout.HelpBox(
+                        "STYLY モバイル (Gamma) モード。STYLY モバイルは Linear 不可のため、ルックは\n" +
+                        "① ライティング/環境光への焼き込み (確実に反映) ＋ ② LDR モードのポスト (効く場面で上乗せ)\n" +
+                        "の2層で効かせます。Color Space は Gamma のままで構いません。",
+                        MessageType.Info);
+                }
+                else
+                {
+                    BOSSLookUI.Hint("汎用 / PC (Linear)。ACES トーンマッピング + HDR グレードのフルポスト。STYLY 以外の納品向け。");
+                }
+            }
+
             EditorGUILayout.LabelField("ルックを選ぶ", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "ワンクリックで「グレード + Bloom/Vignette + フォグ + ライト比」をまとめて設定します。" +
-                "ベイクや生成物は変更しません (見た目の数値だけを上書き)。各タブで後から微調整できます。",
+                preset.outputTarget == OutputTarget.STYLYMobileGamma
+                    ? "ワンクリックで「グレード + Bloom/Vignette + フォグ + ライト比」を設定し、さらに色の意図を" +
+                      "ライティング/環境光へ焼き込みます。ベイク結果や生成物の構造は壊しません。"
+                    : "ワンクリックで「グレード + Bloom/Vignette + フォグ + ライト比」をまとめて設定します。" +
+                      "ベイクや生成物は変更しません (見た目の数値だけを上書き)。各タブで後から微調整できます。",
                 MessageType.Info);
 
             lookStrength = EditorGUILayout.Slider("適用の強さ", lookStrength, 0f, 1f);

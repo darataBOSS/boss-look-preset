@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-06-13
+
+### Added — 出力ターゲット (STYLY モバイル対応)
+- ルックタブ先頭に **出力ターゲット**選択を追加: **汎用 / PC (Linear)** と
+  **STYLY モバイル (Gamma)**。汎用は従来通り (ACES + HDR グレード)。
+- **STYLY モバイルモード**: STYLY モバイルは Linear 不可・自前カメラで描画する
+  ため、ルックを2層で効かせる:
+  1. **ライティング/環境光への焼き込み** (`LookBakeOps`) — スカイボックス Tint/
+     Exposure と Ambient 強度に色の意図を反映。標準シーンデータなのでポストが
+     落ちても残る。
+  2. **LDR モードのポストグレード** — `ColorGrading` を `LowDefinitionRange` に
+     切り替え、ACES なしで明るさ/コントラスト/彩度/色温度/ティント/フィルターを
+     Gamma のまま反映。Bloom 閾値も HDR 非依存に調整。
+- 診断 (Lint) がターゲット連動: STYLY モバイル時は **Gamma を正常扱い**、逆に
+  Linear を警告。汎用時は従来通り Gamma を警告。
+- ウィザードヘッダーに現在の出力ターゲットを常時表示。
+
 ## [0.8.0] - 2026-06-13
 
 ### Added — ルックタブ (Module G)

@@ -104,7 +104,9 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 
             EditorUtility.SetDirty(preset);
 
-            if (!PostProcessOps.IsLinearColorSpace)
+            // Gamma is expected (required) for STYLY mobile, so only nudge toward
+            // Linear on the general target.
+            if (preset.outputTarget == OutputTarget.GeneralLinear && !PostProcessOps.IsLinearColorSpace)
             {
                 Debug.LogWarning("[BOSS Look] Color Space が Linear ではありません。Player Settings で Linear に変更することを推奨します。");
             }
@@ -139,20 +141,38 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 
         private static void ApplyEffectToggles(PostProcessProfile profile, BOSSLookPreset preset)
         {
+            bool mobile = preset.outputTarget == OutputTarget.STYLYMobileGamma;
+
             EnsureEffect<Bloom>(profile, preset.postBloomEnabled, e =>
             {
                 e.intensity.overrideState = true;
                 e.intensity.value = preset.bloomIntensity;
                 e.threshold.overrideState = true;
-                e.threshold.value = 1.1f;
+                // No HDR camera on STYLY mobile, so threshold must sit near LDR
+                // white or bloom never triggers.
+                e.threshold.value = mobile ? 0.9f : 1.1f;
             });
 
             EnsureEffect<ColorGrading>(profile, preset.postColorGradingEnabled, e =>
             {
-                e.tonemapper.overrideState = true;
-                e.tonemapper.value = Tonemapper.ACES;
-                e.postExposure.overrideState = true;
-                e.postExposure.value = preset.gradePostExposure;
+                if (mobile)
+                {
+                    // LDR grading mode: the Gamma/mobile-safe path. No tonemapper
+                    // (ACES needs Linear HDR); exposure maps to LDR brightness.
+                    e.gradingMode.overrideState = true;
+                    e.gradingMode.value = GradingMode.LowDefinitionRange;
+                    e.brightness.overrideState = true;
+                    e.brightness.value = Mathf.Clamp(preset.gradePostExposure * 20f, -100f, 100f);
+                }
+                else
+                {
+                    e.gradingMode.overrideState = true;
+                    e.gradingMode.value = GradingMode.HighDefinitionRange;
+                    e.tonemapper.overrideState = true;
+                    e.tonemapper.value = Tonemapper.ACES;
+                    e.postExposure.overrideState = true;
+                    e.postExposure.value = preset.gradePostExposure;
+                }
                 e.contrast.overrideState = true;
                 e.contrast.value = preset.gradeContrast;
                 e.saturation.overrideState = true;
