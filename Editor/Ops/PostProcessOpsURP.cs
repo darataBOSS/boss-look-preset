@@ -64,6 +64,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             volume.weight = 1f;
             volume.priority = 0f;
             volume.sharedProfile = profile;
+            SceneRelinkOps.Parent(volume.gameObject, preset);
             EditorUtility.SetDirty(volume);
 
             // The volume does nothing until the camera opts in, so flip the

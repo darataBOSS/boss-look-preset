@@ -336,6 +336,17 @@ namespace DarataBOSS.BOSSLookPreset.Editor
                         EditorStyles.miniBoldLabel);
                     GUI.color = prev;
                 }
+
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField("シーン整理", GUILayout.Width(110));
+                    if (GUILayout.Button("🗂 生成物を親オブジェクトにまとめる"))
+                    {
+                        SceneRelinkOps.OrganizeUnderContainer(preset);
+                        ShowNotification(new GUIContent("親オブジェクトにまとめました"));
+                    }
+                }
+                BOSSLookUI.Hint($"プローブ / リフレクション / ライトリグ / Volume / グラウンドシャドウを「BOSS Look [{preset.baseName}]」配下に集約します (ワールド座標は維持)。生成・更新時も自動でまとまります。");
             }
         }
 

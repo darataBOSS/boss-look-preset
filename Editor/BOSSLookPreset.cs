@@ -88,6 +88,8 @@ namespace DarataBOSS.BOSSLookPreset.Editor
         public string folderPath = "Assets/BOSSLookPreset";
         public BOSSLookPhase phase = BOSSLookPhase.NotCreated;
         public OutputTarget outputTarget = OutputTarget.GeneralLinear;
+        // Empty parent that all generated scene objects are gathered under.
+        public GameObject containerRoot;
 
         // ---- Environment / Skybox ----
         public Material skyboxMaterial;

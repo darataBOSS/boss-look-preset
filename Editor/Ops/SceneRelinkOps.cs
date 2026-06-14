@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEngine;
 #if BOSS_LOOK_PRESET_HAS_PPV2
 using UnityEngine.Rendering.PostProcessing;
@@ -33,6 +34,12 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
         public static void RelinkAll(BOSSLookPreset preset)
         {
             if (preset == null) return;
+
+            // Container
+            if (preset.containerRoot == null)
+            {
+                preset.containerRoot = GameObject.Find(ContainerName(preset));
+            }
 
             // Light probe group
             if (preset.lightProbeGroup == null)
@@ -127,6 +134,70 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
         {
             var t = rigRoot.transform.Find($"{BOSSLookDefaults.RigRootName} - {label}");
             return t != null ? t.GetComponent<Light>() : null;
+        }
+
+        // ---------------- Scene organization (container) ----------------
+
+        public static string ContainerName(BOSSLookPreset preset) => $"BOSS Look [{preset.baseName}]";
+
+        /// <summary>Finds or creates the empty parent that all generated scene
+        /// objects are gathered under. Kept at the world origin so children keep
+        /// their world positions when re-parented.</summary>
+        public static Transform GetOrCreateContainer(BOSSLookPreset preset)
+        {
+            if (preset == null) return null;
+            if (preset.containerRoot == null)
+            {
+                preset.containerRoot = GameObject.Find(ContainerName(preset));
+            }
+            if (preset.containerRoot == null)
+            {
+                var go = new GameObject(ContainerName(preset));
+                Undo.RegisterCreatedObjectUndo(go, "Create BOSS Look Container");
+                preset.containerRoot = go;
+                EditorUtility.SetDirty(preset);
+            }
+            return preset.containerRoot.transform;
+        }
+
+        /// <summary>Re-parents a generated object under the container, preserving
+        /// its world position so nothing visually shifts.</summary>
+        public static void Parent(GameObject go, BOSSLookPreset preset)
+        {
+            if (go == null || preset == null) return;
+            if (go == preset.containerRoot) return;
+            var container = GetOrCreateContainer(preset);
+            if (container == null || go.transform.parent == container) return;
+            Undo.SetTransformParent(go.transform, container, "Organize under BOSS Look container");
+        }
+
+        /// <summary>Relinks everything, then gathers all currently-known generated
+        /// objects under the container. Use for scenes built before this existed.</summary>
+        public static void OrganizeUnderContainer(BOSSLookPreset preset)
+        {
+            if (preset == null) return;
+            RelinkAll(preset);
+            GetOrCreateContainer(preset);
+
+            if (preset.lightProbeGroup != null) Parent(preset.lightProbeGroup.gameObject, preset);
+            if (preset.reflectionProbes != null)
+            {
+                foreach (var p in preset.reflectionProbes)
+                {
+                    if (p != null) Parent(p.gameObject, preset);
+                }
+            }
+            if (preset.rigRoot != null) Parent(preset.rigRoot, preset);
+            if (preset.groundShadowPlane != null) Parent(preset.groundShadowPlane, preset);
+
+            // Volumes are scene objects; the post LAYER lives on the camera and
+            // must NOT be reparented.
+            var postVol = preset.postVolume as Component;
+            if (postVol != null) Parent(postVol.gameObject, preset);
+            var urpVol = preset.urpVolume as Component;
+            if (urpVol != null) Parent(urpVol.gameObject, preset);
+
+            EditorUtility.SetDirty(preset);
         }
 
         /// <summary>"Parent/Child/Leaf" path usable with GameObject.Find.

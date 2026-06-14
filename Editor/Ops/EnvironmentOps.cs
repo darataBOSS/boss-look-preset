@@ -273,6 +273,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             var positions = GenerateProbeGrid(preset);
             group.probePositions = positions.ToArray();
 
+            SceneRelinkOps.Parent(group.gameObject, preset);
             EditorUtility.SetDirty(group);
             EditorUtility.SetDirty(preset);
             return group;
@@ -358,6 +359,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
                 probe.clearFlags = ReflectionProbeClearFlags.Skybox;
             }
 
+            SceneRelinkOps.Parent(probe.gameObject, preset);
             EditorUtility.SetDirty(probe);
             EditorUtility.SetDirty(preset);
             return probe;

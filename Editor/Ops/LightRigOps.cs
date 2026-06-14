@@ -139,6 +139,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
                 case RigType.CeilingGrid: BuildCeilingGrid(preset); break;
             }
 
+            SceneRelinkOps.Parent(preset.rigRoot, preset);
             EditorUtility.SetDirty(preset);
         }
 

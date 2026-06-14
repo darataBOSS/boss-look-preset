@@ -87,6 +87,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             // Keep it out of the bake — it's a runtime compositing helper.
             GameObjectUtility.SetStaticEditorFlags(plane, 0);
 
+            SceneRelinkOps.Parent(plane, preset);
             EditorUtility.SetDirty(preset);
         }
 
