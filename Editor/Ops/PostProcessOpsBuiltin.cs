@@ -218,10 +218,22 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             // The actual bug fix: PPv2's AddSettings only adds to the in-memory
             // list — without this, the effect is never written to disk and the
             // saved/uploaded profile ends up empty (all null entries).
-            if (!AssetDatabase.IsSubAsset(effect) && AssetDatabase.Contains(profile))
+            //
+            // Guard with IsPersistent (not IsSubAsset): after a reimport the live
+            // in-memory instance and its on-disk representation can differ, and
+            // IsSubAsset misreports, leading to a double-add that throws. Wrap in
+            // try/catch so a persist hiccup never blocks switching looks.
+            if (AssetDatabase.Contains(profile) && !EditorUtility.IsPersistent(effect))
             {
                 effect.hideFlags = HideFlags.HideInHierarchy;
-                AssetDatabase.AddObjectToAsset(effect, profile);
+                try
+                {
+                    AssetDatabase.AddObjectToAsset(effect, profile);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogWarning($"[BOSS Look] エフェクト {typeof(T).Name} の保存に失敗しました: {e.Message}");
+                }
             }
 
             effect.enabled.overrideState = true;
@@ -235,36 +247,25 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
         /// from an older build is rebuilt cleanly.</summary>
         private static void CleanProfile(PostProcessProfile profile)
         {
-            if (profile.settings != null)
-            {
-                var seenTypes = new System.Collections.Generic.HashSet<System.Type>();
-                for (int i = profile.settings.Count - 1; i >= 0; i--)
-                {
-                    var s = profile.settings[i];
-                    if (s == null)
-                    {
-                        profile.settings.RemoveAt(i);
-                        continue;
-                    }
-                    if (!seenTypes.Add(s.GetType()))
-                    {
-                        profile.settings.RemoveAt(i);
-                        if (AssetDatabase.IsSubAsset(s)) Object.DestroyImmediate(s, true);
-                    }
-                }
-            }
+            if (profile.settings == null) return;
 
-            // Drop sub-assets that are no longer referenced by the list.
-            string path = AssetDatabase.GetAssetPath(profile);
-            if (!string.IsNullOrEmpty(path))
+            // Remove only what's safe to remove by list inspection: null entries
+            // (legacy un-persisted effects) and duplicate types. We deliberately
+            // do NOT scan disk representations and destroy "orphans" — instance
+            // identity differs after reimport, so that path can delete live
+            // sub-assets. Stray sub-assets are harmless cosmetic bloat.
+            var seenTypes = new System.Collections.Generic.HashSet<System.Type>();
+            for (int i = profile.settings.Count - 1; i >= 0; i--)
             {
-                foreach (var sub in AssetDatabase.LoadAllAssetRepresentationsAtPath(path))
+                var s = profile.settings[i];
+                if (s == null)
                 {
-                    if (sub is PostProcessEffectSettings effect &&
-                        (profile.settings == null || !profile.settings.Contains(effect)))
-                    {
-                        Object.DestroyImmediate(sub, true);
-                    }
+                    profile.settings.RemoveAt(i);
+                    continue;
+                }
+                if (!seenTypes.Add(s.GetType()))
+                {
+                    profile.settings.RemoveAt(i);
                 }
             }
             EditorUtility.SetDirty(profile);

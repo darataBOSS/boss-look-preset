@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.2] - 2026-06-14
+
+### Fixed — 別ルックへ切り替えると例外
+- ルックを切り替える (= プロファイル再適用) 際に
+  `UnityException: Adding asset to object ... failed` で落ちる問題を修正。
+  リインポート後はエフェクトの「メモリ上インスタンス」と「ディスク表現」が
+  別物になり `IsSubAsset` が誤判定 → 既に保存済みのエフェクトを二重に
+  `AddObjectToAsset` して例外になっていた。
+- ガードを `EditorUtility.IsPersistent` に変更し、`AddObjectToAsset` を
+  try/catch で保護。プロファイル掃除も、ディスク表現のオーファン破棄
+  (インスタンス不一致で生きたサブアセットを消す恐れ) をやめ、リストの
+  null / 重複除去のみに限定。
+- Built-in (PPv2) / URP 両方に適用。
+
 ## [0.9.1] - 2026-06-14
 
 ### Fixed — ポストプロセスが保存されない致命バグ

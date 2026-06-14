@@ -182,11 +182,19 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 
             // Same persistence fix as the Built-in path: VolumeProfile.Add only
             // touches the in-memory components list, so without this the saved /
-            // uploaded profile has no effects.
-            if (!AssetDatabase.IsSubAsset(component) && AssetDatabase.Contains(profile))
+            // uploaded profile has no effects. Guard with IsPersistent (not
+            // IsSubAsset) + try/catch to avoid the double-add throw after reimport.
+            if (AssetDatabase.Contains(profile) && !EditorUtility.IsPersistent(component))
             {
                 component.hideFlags = HideFlags.HideInHierarchy;
-                AssetDatabase.AddObjectToAsset(component, profile);
+                try
+                {
+                    AssetDatabase.AddObjectToAsset(component, profile);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogWarning($"[BOSS Look] エフェクト {typeof(T).Name} の保存に失敗しました: {e.Message}");
+                }
             }
 
             component.active = enabled;
@@ -196,35 +204,22 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 
         private static void CleanProfile(VolumeProfile profile)
         {
-            if (profile.components != null)
-            {
-                var seenTypes = new System.Collections.Generic.HashSet<System.Type>();
-                for (int i = profile.components.Count - 1; i >= 0; i--)
-                {
-                    var c = profile.components[i];
-                    if (c == null)
-                    {
-                        profile.components.RemoveAt(i);
-                        continue;
-                    }
-                    if (!seenTypes.Add(c.GetType()))
-                    {
-                        profile.components.RemoveAt(i);
-                        if (AssetDatabase.IsSubAsset(c)) Object.DestroyImmediate(c, true);
-                    }
-                }
-            }
+            if (profile.components == null) return;
 
-            string path = AssetDatabase.GetAssetPath(profile);
-            if (!string.IsNullOrEmpty(path))
+            // Null + duplicate-type removal only; no disk-orphan destroy (instance
+            // identity differs after reimport and would delete live sub-assets).
+            var seenTypes = new System.Collections.Generic.HashSet<System.Type>();
+            for (int i = profile.components.Count - 1; i >= 0; i--)
             {
-                foreach (var sub in AssetDatabase.LoadAllAssetRepresentationsAtPath(path))
+                var c = profile.components[i];
+                if (c == null)
                 {
-                    if (sub is VolumeComponent vc &&
-                        (profile.components == null || !profile.components.Contains(vc)))
-                    {
-                        Object.DestroyImmediate(sub, true);
-                    }
+                    profile.components.RemoveAt(i);
+                    continue;
+                }
+                if (!seenTypes.Add(c.GetType()))
+                {
+                    profile.components.RemoveAt(i);
                 }
             }
             EditorUtility.SetDirty(profile);
