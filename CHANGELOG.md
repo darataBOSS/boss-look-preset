@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] - 2026-06-14
+
+### Fixed — ポストプロセスが保存されない致命バグ
+- Post Process Profile / URP Volume Profile に追加したエフェクトが **ディスクに
+  サブアセットとして保存されていなかった** 問題を修正。`AddSettings` / `Add` は
+  メモリ上のリストに足すだけで、`AssetDatabase.AddObjectToAsset` を呼ばないと
+  永続化されず、保存・アップロード・ドメインリロードで全エフェクトが null 化して
+  いた (プロファイルが空 = ポストが何も効かない)。STYLY アップ時に「ルックが
+  効かずベイクの見た目のまま」だった主因。
+- 旧ビルドで壊れたプロファイル (null/重複エントリ) を再セットアップ時に自動で
+  掃除して作り直すように。
+- Built-in (PPv2) と URP の両方に適用。`ReapplyProfile` も保存するように変更。
+
 ## [0.9.0] - 2026-06-13
 
 ### Added — 出力ターゲット (STYLY モバイル対応)

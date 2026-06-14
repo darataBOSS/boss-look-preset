@@ -115,6 +115,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             {
                 ApplyEffectToggles(profile, preset);
                 EditorUtility.SetDirty(profile);
+                AssetDatabase.SaveAssets();
             }
 #endif
         }
@@ -122,6 +123,8 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 #if BOSS_LOOK_PRESET_HAS_URP
         private static void ApplyEffectToggles(VolumeProfile profile, BOSSLookPreset preset)
         {
+            CleanProfile(profile);
+
             EnsureComponent<Bloom>(profile, preset.postBloomEnabled, b =>
             {
                 b.intensity.overrideState = true;
@@ -176,8 +179,55 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             {
                 component = profile.Add<T>(overrides: true);
             }
+
+            // Same persistence fix as the Built-in path: VolumeProfile.Add only
+            // touches the in-memory components list, so without this the saved /
+            // uploaded profile has no effects.
+            if (!AssetDatabase.IsSubAsset(component) && AssetDatabase.Contains(profile))
+            {
+                component.hideFlags = HideFlags.HideInHierarchy;
+                AssetDatabase.AddObjectToAsset(component, profile);
+            }
+
             component.active = enabled;
             configure?.Invoke(component);
+            EditorUtility.SetDirty(component);
+        }
+
+        private static void CleanProfile(VolumeProfile profile)
+        {
+            if (profile.components != null)
+            {
+                var seenTypes = new System.Collections.Generic.HashSet<System.Type>();
+                for (int i = profile.components.Count - 1; i >= 0; i--)
+                {
+                    var c = profile.components[i];
+                    if (c == null)
+                    {
+                        profile.components.RemoveAt(i);
+                        continue;
+                    }
+                    if (!seenTypes.Add(c.GetType()))
+                    {
+                        profile.components.RemoveAt(i);
+                        if (AssetDatabase.IsSubAsset(c)) Object.DestroyImmediate(c, true);
+                    }
+                }
+            }
+
+            string path = AssetDatabase.GetAssetPath(profile);
+            if (!string.IsNullOrEmpty(path))
+            {
+                foreach (var sub in AssetDatabase.LoadAllAssetRepresentationsAtPath(path))
+                {
+                    if (sub is VolumeComponent vc &&
+                        (profile.components == null || !profile.components.Contains(vc)))
+                    {
+                        Object.DestroyImmediate(sub, true);
+                    }
+                }
+            }
+            EditorUtility.SetDirty(profile);
         }
 #endif
 

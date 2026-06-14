@@ -122,6 +122,7 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             {
                 ApplyEffectToggles(profile, preset);
                 EditorUtility.SetDirty(profile);
+                AssetDatabase.SaveAssets();
             }
 #endif
         }
@@ -141,6 +142,10 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
 
         private static void ApplyEffectToggles(PostProcessProfile profile, BOSSLookPreset preset)
         {
+            // Heal any profile from older builds where effects were created but
+            // never persisted as sub-assets (null/duplicate entries).
+            CleanProfile(profile);
+
             bool mobile = preset.outputTarget == OutputTarget.STYLYMobileGamma;
 
             EnsureEffect<Bloom>(profile, preset.postBloomEnabled, e =>
@@ -209,9 +214,60 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             where T : PostProcessEffectSettings
         {
             T effect = profile.HasSettings<T>() ? profile.GetSetting<T>() : profile.AddSettings<T>();
+
+            // The actual bug fix: PPv2's AddSettings only adds to the in-memory
+            // list — without this, the effect is never written to disk and the
+            // saved/uploaded profile ends up empty (all null entries).
+            if (!AssetDatabase.IsSubAsset(effect) && AssetDatabase.Contains(profile))
+            {
+                effect.hideFlags = HideFlags.HideInHierarchy;
+                AssetDatabase.AddObjectToAsset(effect, profile);
+            }
+
             effect.enabled.overrideState = true;
             effect.enabled.value = enabled;
             configure?.Invoke(effect);
+            EditorUtility.SetDirty(effect);
+        }
+
+        /// <summary>Removes null entries (legacy un-persisted effects) and
+        /// duplicate effect types, and deletes orphan sub-assets, so a profile
+        /// from an older build is rebuilt cleanly.</summary>
+        private static void CleanProfile(PostProcessProfile profile)
+        {
+            if (profile.settings != null)
+            {
+                var seenTypes = new System.Collections.Generic.HashSet<System.Type>();
+                for (int i = profile.settings.Count - 1; i >= 0; i--)
+                {
+                    var s = profile.settings[i];
+                    if (s == null)
+                    {
+                        profile.settings.RemoveAt(i);
+                        continue;
+                    }
+                    if (!seenTypes.Add(s.GetType()))
+                    {
+                        profile.settings.RemoveAt(i);
+                        if (AssetDatabase.IsSubAsset(s)) Object.DestroyImmediate(s, true);
+                    }
+                }
+            }
+
+            // Drop sub-assets that are no longer referenced by the list.
+            string path = AssetDatabase.GetAssetPath(profile);
+            if (!string.IsNullOrEmpty(path))
+            {
+                foreach (var sub in AssetDatabase.LoadAllAssetRepresentationsAtPath(path))
+                {
+                    if (sub is PostProcessEffectSettings effect &&
+                        (profile.settings == null || !profile.settings.Contains(effect)))
+                    {
+                        Object.DestroyImmediate(sub, true);
+                    }
+                }
+            }
+            EditorUtility.SetDirty(profile);
         }
 #endif
 
