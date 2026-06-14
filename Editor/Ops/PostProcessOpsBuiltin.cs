@@ -37,6 +37,10 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
                 "OK");
             return;
 #else
+            // Re-find the existing volume by name first; without this, a null
+            // scene reference (after reload) would spawn a duplicate volume.
+            SceneRelinkOps.RelinkAll(preset);
+
             string profilePath = $"{preset.folderPath}/{preset.baseName}_PostProfile.asset";
             var profile = AssetDatabase.LoadAssetAtPath<PostProcessProfile>(profilePath);
             if (profile == null)
@@ -50,14 +54,25 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             AssetDatabase.SaveAssets();
             preset.postProfile = profile;
 
+            string volumeName = $"{preset.baseName} Post Process Volume";
             var volume = preset.postVolume;
             if (volume == null)
             {
-                var volumeGO = new GameObject($"{preset.baseName} Post Process Volume");
+                var volumeGO = new GameObject(volumeName);
                 Undo.RegisterCreatedObjectUndo(volumeGO, "Create Post Process Volume");
                 volume = volumeGO.AddComponent<PostProcessVolume>();
                 preset.postVolume = volume;
             }
+
+            // Remove any stray duplicate volumes left by earlier runs.
+            foreach (var other in SceneRelinkOps.FindAllInScene<PostProcessVolume>())
+            {
+                if (other != null && other != volume && other.gameObject.name == volumeName)
+                {
+                    Undo.DestroyObjectImmediate(other.gameObject);
+                }
+            }
+
             volume.isGlobal = true;
             volume.weight = 1f;
             volume.priority = 0f;

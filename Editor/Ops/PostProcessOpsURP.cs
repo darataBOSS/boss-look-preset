@@ -39,6 +39,10 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
                 "OK");
             return;
 #else
+            // Re-find the existing volume by name first so a null scene reference
+            // (after reload) doesn't spawn a duplicate.
+            SceneRelinkOps.RelinkAll(preset);
+
             string profilePath = $"{preset.folderPath}/{preset.baseName}_VolumeProfile.asset";
             var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(profilePath);
             if (profile == null)
@@ -52,14 +56,25 @@ namespace DarataBOSS.BOSSLookPreset.Editor.Ops
             AssetDatabase.SaveAssets();
             preset.urpVolumeProfile = profile;
 
+            string volumeName = $"{preset.baseName} Volume";
             var volume = preset.urpVolume;
             if (volume == null)
             {
-                var volumeGO = new GameObject($"{preset.baseName} Volume");
+                var volumeGO = new GameObject(volumeName);
                 Undo.RegisterCreatedObjectUndo(volumeGO, "Create URP Volume");
                 volume = volumeGO.AddComponent<Volume>();
                 preset.urpVolume = volume;
             }
+
+            // Remove any stray duplicate volumes left by earlier runs.
+            foreach (var other in SceneRelinkOps.FindAllInScene<Volume>())
+            {
+                if (other != null && other != volume && other.gameObject.name == volumeName)
+                {
+                    Undo.DestroyObjectImmediate(other.gameObject);
+                }
+            }
+
             volume.isGlobal = true;
             volume.weight = 1f;
             volume.priority = 0f;

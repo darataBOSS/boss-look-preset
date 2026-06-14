@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.1] - 2026-06-14
+
+### Fixed — Post Process Volume が重複する
+- ポストの `Setup` だけ開始時に `SceneRelinkOps.RelinkAll` を呼んでおらず、
+  シーン参照が null (リロード後など) のときに既存を探さず新規 Volume を
+  作っていたため、同名の Post Process Volume / URP Volume が重複していた。
+- Setup の冒頭で relink するようにし、さらに同名の余分な Volume を自動削除。
+  Built-in (PPv2) / URP 両方に適用。
+
 ## [0.10.0] - 2026-06-14
 
 ### Added — シーン整理 (親オブジェクトに集約)
